@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- House Base (Rectangle Outline) -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="4"
+        android:pathData="M50,100 L50,200 L150,200 L150,100 Z" />
+
+    <!-- House Roof (Triangle Outline) -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="4"
+        android:pathData="M50,100 L100,50 L150,100 Z" />
+
+    <!-- Diagonal Line 1 (Top-left to Bottom-right) for "X" -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="4"
+        android:pathData="M50,100 L150,200" />
+
+    <!-- Diagonal Line 2 (Top-right to Bottom-left) for "X" -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="4"
+        android:pathData="M150,100 L50,200" />
+
+</vector>
+

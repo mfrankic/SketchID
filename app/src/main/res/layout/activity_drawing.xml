@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical">
+
+        <!-- Reference Image -->
+        <ImageView
+            android:id="@+id/reference_image"
+            android:layout_width="match_parent"
+            android:layout_height="200dp" />
+
+        <!-- Drawing View -->
+        <com.mfrankic.sketchid.CustomDrawingView
+            android:id="@+id/drawing_view"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="#FFFFFF" />
+
+        <!-- Buttons -->
+        <Button
+            android:id="@+id/btn_clear"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Clear Canvas" />
+
+        <Button
+            android:id="@+id/btn_next_image"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Next Image" />
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
