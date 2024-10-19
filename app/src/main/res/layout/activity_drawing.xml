@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/drawing_activity"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/reference_image"
+        android:src="@drawable/baseline_image_24"
+        android:layout_width="match_parent"
+        android:layout_height="150dp"
+        android:layout_marginVertical="16dp"
+        android:visibility="invisible"
+        android:contentDescription="Reference Image"
+        app:layout_constraintTop_toTopOf="@+id/drawing_activity" />
+
+    <TextView
+        android:id="@+id/reference_text"
+        android:layout_width="match_parent"
+        android:layout_height="150dp"
+        android:layout_marginVertical="16dp"
+        android:visibility="invisible"
+        android:gravity="center"
+        android:textSize="30sp"
+        android:text="Reference Image"
+        app:layout_constraintTop_toTopOf="@+id/drawing_activity" />
+
+    <TextView
+        android:id="@+id/attempt_progress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginVertical="16dp"
+        android:gravity="center"
+        android:textSize="16sp"
+        android:textColor="@android:color/black"
+        app:layout_constraintTop_toBottomOf="@id/reference_image" />
+
+    <FrameLayout
+        android:id="@+id/drawing_frame"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:padding="8dp"
+        android:background="@android:color/white"
+        app:layout_constraintTop_toBottomOf="@id/reference_image"
+        app:layout_constraintBottom_toTopOf="@id/bottom_buttons"
+        app:layout_constraintStart_toStartOf="@id/drawing_activity"
+        app:layout_constraintEnd_toEndOf="@id/drawing_activity">
+
+        <com.mfrankic.sketchid.CustomDrawingView
+            android:id="@+id/drawing_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/bottom_buttons"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:baselineAligned="false"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:layout_marginHorizontal="16dp"
+        android:layout_marginVertical="16dp"
+        app:layout_constraintBottom_toBottomOf="@+id/drawing_activity">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:layout_weight="1">
+
+            <Button
+                android:id="@+id/btn_clear"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Clear Canvas" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:layout_weight="1">
+
+            <Button
+                android:id="@+id/btn_next_image"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Next Image" />
+        </LinearLayout>
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>
