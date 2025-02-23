@@ -11,37 +11,39 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
 import java.util.List;
 import java.util.concurrent.Executors;
 
-@Database(entities = {DrawingData.class, User.class, Image.class}, version = 12, exportSchema = false)
+@Database(entities = {DrawingData.class, User.class, Image.class}, version = 12, exportSchema =
+    false)
 public abstract class AppDatabase extends RoomDatabase {
 
-    private static AppDatabase instance;
+  private static AppDatabase instance;
+  private static final RoomDatabase.Callback roomDatabaseCallback = new RoomDatabase.Callback() {
+    @Override
+    public void onCreate(@NonNull SupportSQLiteDatabase db) {
+      super.onCreate(db);
 
-    public abstract DrawingDataDao drawingDataDao();
-    public abstract UserDao userDao();
-    public abstract ImageDao imageDao();
+      Executors.newSingleThreadExecutor().execute(() -> {
+        AppDatabase database = instance;
 
-    public static synchronized AppDatabase getInstance(Context context) {
-        if (instance == null) {
-            instance = Room.databaseBuilder(context.getApplicationContext(),
-                            AppDatabase.class, "drawing_database.db")
-                    .fallbackToDestructiveMigration()
-                    .addCallback(roomDatabaseCallback)
-                    .build();
-        }
-        return instance;
+        List<Image> images = InitialData.getImages();
+        database.imageDao().insertAll(images);
+      });
     }
+  };
 
-    private static final RoomDatabase.Callback roomDatabaseCallback = new RoomDatabase.Callback() {
-        @Override
-        public void onCreate(@NonNull SupportSQLiteDatabase db) {
-            super.onCreate(db);
+  public static synchronized AppDatabase getInstance(Context context) {
+    if (instance == null) {
+      instance = Room.databaseBuilder(context.getApplicationContext(),
+              AppDatabase.class, "drawing_database.db")
+          .fallbackToDestructiveMigration()
+          .addCallback(roomDatabaseCallback)
+          .build();
+    }
+    return instance;
+  }
 
-            Executors.newSingleThreadExecutor().execute(() -> {
-                AppDatabase database = instance;
+  public abstract DrawingDataDao drawingDataDao();
 
-                List<Image> images = InitialData.getImages();
-                database.imageDao().insertAll(images);
-            });
-        }
-    };
+  public abstract UserDao userDao();
+
+  public abstract ImageDao imageDao();
 }
