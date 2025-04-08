@@ -2,6 +2,7 @@ package com.mfrankic.sketchid;
 
 import static com.mfrankic.sketchid.Constants.KEY_CURRENT_ITEM_ATTEMPT;
 import static com.mfrankic.sketchid.Constants.KEY_CURRENT_ITEM_INDEX;
+import static com.mfrankic.sketchid.Constants.KEY_DRAWING_ATTEMPTS;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -20,14 +21,19 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.PreferenceManager;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 public class DrawingActivity extends AppCompatActivity {
-  private static final int ITEM_ATTEMPTS = 4;
+  private static final int DEFAULT_ATTEMPTS = 4;
   private final List<Item> items = new ArrayList<>();
   private final List<DrawingData> drawingDataList = new ArrayList<>();
   private FrameLayout drawingLayout;
@@ -40,6 +46,8 @@ public class DrawingActivity extends AppCompatActivity {
   private Long startTimestamp;
   private AppDatabase db;
   private Executor executor;
+  private int itemAttempts;
+  private String sessionId;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -51,40 +59,44 @@ public class DrawingActivity extends AppCompatActivity {
       getSupportActionBar().setDisplayShowHomeEnabled(true);
     }
 
-    getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
-      @Override
-      public void handleOnBackPressed() {
-        new AlertDialog.Builder(DrawingActivity.this)
-            .setTitle("Exit Drawing")
-            .setMessage("Are you sure you want to exit?")
-            .setPositiveButton("Yes", (dialog, which) -> DrawingActivity.super.finish())
-            .setNegativeButton("No", null)
-            .show();
-      }
-    });
+    getOnBackPressedDispatcher().addCallback(
+        this, new OnBackPressedCallback(true) {
+          @Override
+          public void handleOnBackPressed() {
+            new AlertDialog.Builder(DrawingActivity.this)
+                .setTitle("Exit Drawing")
+                .setMessage("Are you sure you want to exit?")
+                .setPositiveButton("Yes", (dialog, which) -> DrawingActivity.super.finish())
+                .setNegativeButton("No", null)
+                .show();
+          }
+        }
+    );
 
     db = AppDatabase.getInstance(this);
     executor = Executors.newSingleThreadExecutor();
 
     selectedUserID = getIntent().getIntExtra("userID", -1);
 
+    // Get the drawing attempts from preferences
+    itemAttempts = getDrawingAttemptsFromPreferences();
+
     executor.execute(() -> {
       if (selectedUserID == -1 || db.userDao().getUserByID(selectedUserID) == null) {
         runOnUiThread(() -> {
-          Toast.makeText(this, "Invalid user selected. Returning to Home.", Toast.LENGTH_LONG).show();
+          Toast
+              .makeText(this, "Invalid user selected. Returning to Home.", Toast.LENGTH_LONG)
+              .show();
           finish();
         });
         return;
       }
+
+      // Initialize or get the session ID
+      sessionId = UserProgressManager.getUserSessionId(this, selectedUserID);
+
       runOnUiThread(this::initializeDrawingActivity);
     });
-  }
-
-  @Override
-  protected void onResume() {
-    super.onResume();
-    loadProgress();
-    updateProgressText();
   }
 
   @Override
@@ -94,25 +106,39 @@ public class DrawingActivity extends AppCompatActivity {
   }
 
   @Override
-  public boolean onOptionsItemSelected(MenuItem item) {
-    if (item.getItemId() == android.R.id.home) {
-      getOnBackPressedDispatcher().onBackPressed();
-      return true;
-    }
-    return super.onOptionsItemSelected(item);
-  }
-
-  private void saveProgress() {
-    PreferenceManager.getDefaultSharedPreferences(this).edit()
-        .putInt(KEY_CURRENT_ITEM_INDEX, currentItemIndex)
-        .putInt(KEY_CURRENT_ITEM_ATTEMPT, currentItemAttempt)
-        .apply();
+  protected void onResume() {
+    super.onResume();
+    loadProgress();
+    updateProgressText();
   }
 
   private void loadProgress() {
-    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-    currentItemIndex = prefs.getInt(KEY_CURRENT_ITEM_INDEX, 0);
-    currentItemAttempt = prefs.getInt(KEY_CURRENT_ITEM_ATTEMPT, 1);
+    // Load user-specific progress
+    UserProgressManager.UserProgress progress = UserProgressManager.loadUserProgress(
+        this,
+        selectedUserID
+    );
+    currentItemIndex = progress.getItemIndex();
+    currentItemAttempt = progress.getItemAttempt();
+    sessionId = progress.getSessionId();
+  }
+
+  private void saveProgress() {
+    // Save user-specific progress
+    UserProgressManager.saveUserProgress(
+        this,
+        selectedUserID,
+        currentItemIndex,
+        currentItemAttempt,
+        sessionId
+    );
+  }
+
+  private int getDrawingAttemptsFromPreferences() {
+    String attempts = PreferenceManager
+        .getDefaultSharedPreferences(this)
+        .getString(KEY_DRAWING_ATTEMPTS, "-1");
+    return attempts.equals("-1") ? DEFAULT_ATTEMPTS : Integer.parseInt(attempts);
   }
 
   private void initializeDrawingActivity() {
@@ -130,8 +156,13 @@ public class DrawingActivity extends AppCompatActivity {
 
     nextImageButton.setOnClickListener(v -> {
       if (drawingDataList.isEmpty()) {
-        Toast.makeText(this, "Please draw something before moving to the next image.",
-            Toast.LENGTH_LONG).show();
+        Toast
+            .makeText(
+                this,
+                "Please draw something before moving to the next image.",
+                Toast.LENGTH_LONG
+            )
+            .show();
         return;
       }
 
@@ -143,12 +174,12 @@ public class DrawingActivity extends AppCompatActivity {
 
       currentItemAttempt++;
 
-      if (currentItemAttempt > ITEM_ATTEMPTS) {
+      if (currentItemAttempt > itemAttempts) {
         currentItemAttempt = 1;
         currentItemIndex++;
       }
 
-      if (currentItemIndex == (items.size() - 1) && currentItemAttempt == ITEM_ATTEMPTS) {
+      if (currentItemIndex == (items.size() - 1) && currentItemAttempt == itemAttempts) {
         nextImageButton.setText(R.string.finish);
       }
 
@@ -157,6 +188,12 @@ public class DrawingActivity extends AppCompatActivity {
         reInitializeDrawingView();
         updateProgressText();
       } else {
+        // Drawing session completed, mark user as finished and clear progress
+        UserProgressManager.markUserAsFinished(this, selectedUserID);
+        UserProgressManager.clearUserProgress(this, selectedUserID);
+        // Also clear global progress keys for backward compatibility
+        resetGlobalProgress();
+
         currentItemIndex = 0;
         currentItemAttempt = 1;
         Intent intent = new Intent(DrawingActivity.this, HomeActivity.class);
@@ -170,19 +207,6 @@ public class DrawingActivity extends AppCompatActivity {
       drawingDataList.clear();
       startTimestamp = null;
     });
-  }
-
-  private void updateProgressText() {
-    int currentOverallAttempt = (currentItemIndex * ITEM_ATTEMPTS) + currentItemAttempt;
-    int totalAttempts = ITEM_ATTEMPTS * items.size();
-
-    String progressText = String.format(
-        Locale.getDefault(),
-        "Attempt: %d/%d\tOverall: %d/%d",
-        currentItemAttempt, ITEM_ATTEMPTS, currentOverallAttempt, totalAttempts
-    );
-    TextView attemptProgressText = findViewById(R.id.attempt_progress);
-    attemptProgressText.setText(progressText);
   }
 
   private void reInitializeDrawingView() {
@@ -199,13 +223,150 @@ public class DrawingActivity extends AppCompatActivity {
 
       if (currentItemID != -1 && drawingDataList.isEmpty()) {
         startTimestamp = timestamp;
-        drawingDataList.add(new DrawingData(time, x, y, "START", selectedUserID, imageID,
-            items.get(currentItemIndex).getType(), currentItemAttempt));
+        drawingDataList.add(new DrawingData(
+            time,
+            x,
+            y,
+            "START",
+            selectedUserID,
+            imageID,
+            items.get(currentItemIndex).getType(),
+            currentItemAttempt,
+            sessionId
+        ));
       }
 
-      drawingDataList.add(new DrawingData(time, x, y, action, selectedUserID, imageID,
-          items.get(currentItemIndex).getType(), currentItemAttempt));
+      drawingDataList.add(new DrawingData(
+          time,
+          x,
+          y,
+          action,
+          selectedUserID,
+          imageID,
+          items.get(currentItemIndex).getType(),
+          currentItemAttempt,
+          sessionId
+      ));
     });
+  }
+
+  private void loadItems() {
+    List<Image> allImages = db.imageDao().getAllImages();
+    Set<Integer> selectedImageIds = SelectedImagesManager.getSelectedImages(this);
+
+    items.clear();
+    List<Image> selectedImages = new ArrayList<>();
+    for (Image image : allImages) {
+      if (selectedImageIds.contains(image.id)) {
+        selectedImages.add(image);
+      }
+    }
+
+    // Check if random order is enabled
+    SharedPreferences prefs = getSharedPreferences("image_order", MODE_PRIVATE);
+    boolean isRandomOrder = prefs.getBoolean("random_order", false);
+
+    if (isRandomOrder) {
+      // Shuffle the selected images
+      java.util.Collections.shuffle(selectedImages);
+    } else {
+      // Get saved order
+      String json = prefs.getString("image_order", null);
+      if (json != null) {
+        Gson gson = new Gson();
+        Type type = new TypeToken<List<Integer>>() {
+        }.getType();
+        List<Integer> savedOrder = gson.fromJson(json, type);
+
+        if (savedOrder != null && !savedOrder.isEmpty()) {
+          // Sort images according to saved order
+          List<Image> orderedImages = new ArrayList<>();
+          for (Integer id : savedOrder) {
+            for (Image image : selectedImages) {
+              if (image.id == id) {
+                orderedImages.add(image);
+                break;
+              }
+            }
+          }
+          // Add any new images that weren't in the saved order
+          for (Image image : selectedImages) {
+            if (!orderedImages.contains(image)) {
+              orderedImages.add(image);
+            }
+          }
+          selectedImages = orderedImages;
+        }
+      }
+    }
+
+    for (Image image : selectedImages) {
+      items.add(new Item(image.id, image.name, image.source, image.path, Item.Type.IMAGE));
+    }
+
+    executor.execute(() -> runOnUiThread(() -> {
+      if (!items.isEmpty()) {
+        loadCurrentItem();
+        updateProgressText();
+      } else {
+        Toast
+            .makeText(
+                this,
+                "No images selected. Please select images in settings.",
+                Toast.LENGTH_LONG
+            )
+            .show();
+        finish();
+      }
+    }));
+  }
+
+  private void updateProgressText() {
+    int currentOverallAttempt = (currentItemIndex * itemAttempts) + currentItemAttempt;
+    int totalAttempts = itemAttempts * items.size();
+
+    String progressText = String.format(
+        Locale.getDefault(),
+        "Attempt: %d/%d\tOverall: %d/%d",
+        currentItemAttempt,
+        itemAttempts,
+        currentOverallAttempt,
+        totalAttempts
+    );
+    TextView attemptProgressText = findViewById(R.id.attempt_progress);
+    attemptProgressText.setText(progressText);
+  }
+
+  private void loadCurrentItem() {
+    Item currentItem = items.get(currentItemIndex);
+
+    switch (currentItem.getType()) {
+      case IMAGE:
+        if (currentItem.getSource().equals("default")) {
+          referenceImage.setImageTintList(getResources().getColorStateList(
+              R.color.onSurface,
+              null
+          ));
+          int resourceId = Integer.parseInt(currentItem.getPath());
+          referenceImage.setImageResource(resourceId);
+        } else {
+          referenceImage.setImageTintList(null);
+          referenceImage.setImageURI(android.net.Uri.parse(currentItem.getPath()));
+        }
+        referenceImage.setVisibility(View.VISIBLE);
+        break;
+    }
+  }
+
+  // Method to reset global progress keys used by legacy code
+  private void resetGlobalProgress() {
+    // For backward compatibility, also clear the global progress keys
+    PreferenceManager
+        .getDefaultSharedPreferences(this)
+        .edit()
+        .remove(KEY_CURRENT_ITEM_INDEX)
+        .remove(KEY_CURRENT_ITEM_ATTEMPT)
+        .apply();
   }
 
   private void saveDrawingToDatabase() {
@@ -216,32 +377,28 @@ public class DrawingActivity extends AppCompatActivity {
     });
   }
 
-  private void loadItems() {
-    List<Image> images = db.imageDao().getAllImages();
-
-    items.clear();
-    for (Image image : images) {
-      items.add(new Item(image.id, image.name, image.source, Item.Type.IMAGE));
+  @Override
+  public boolean onOptionsItemSelected(MenuItem item) {
+    if (item.getItemId() == android.R.id.home) {
+      getOnBackPressedDispatcher().onBackPressed();
+      return true;
     }
-
-    executor.execute(() -> runOnUiThread(() -> {
-      if (!items.isEmpty()) {
-        loadCurrentItem();
-        updateProgressText();
-      } else {
-        Toast.makeText(this, "No items found. Please add items to draw.", Toast.LENGTH_LONG).show();
-      }
-    }));
+    return super.onOptionsItemSelected(item);
   }
 
-  private void loadCurrentItem() {
-    Item currentItem = items.get(currentItemIndex);
+  @Override
+  protected void onDestroy() {
+    super.onDestroy();
+  }
 
-    switch (currentItem.getType()) {
-      case IMAGE:
-        referenceImage.setImageResource(currentItem.getResource());
-        referenceImage.setVisibility(View.VISIBLE);
-        break;
-    }
+  @Override
+  public boolean onSupportNavigateUp() {
+    onBackPressed();
+    return true;
+  }
+
+  @Override
+  public void onBackPressed() {
+    getOnBackPressedDispatcher().onBackPressed();
   }
 }

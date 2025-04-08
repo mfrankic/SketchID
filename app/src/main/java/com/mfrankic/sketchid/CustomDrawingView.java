@@ -30,10 +30,6 @@ public class CustomDrawingView extends View {
     setupDrawing();
   }
 
-  public void setOnStrokeListener(OnStrokeListener listener) {
-    this.onStrokeListener = listener;
-  }
-
   private void setupDrawing() {
     drawPath = new Path();
     drawPaint = new Paint();
@@ -44,6 +40,14 @@ public class CustomDrawingView extends View {
     drawPaint.setStrokeCap(Paint.Cap.ROUND);
     drawPaint.setStrokeWidth(5 * displayMetrics.density);
     canvasPaint = new Paint(Paint.DITHER_FLAG);
+  }
+
+  public void setOnStrokeListener(OnStrokeListener listener) {
+    this.onStrokeListener = listener;
+  }
+
+  public interface OnStrokeListener {
+    void onStroke(float x, float y, long timestamp, String action);
   }
 
   @Override
@@ -145,7 +149,5 @@ public class CustomDrawingView extends View {
     }
   }
 
-  public interface OnStrokeListener {
-    void onStroke(float x, float y, long timestamp, String action);
-  }
+
 }

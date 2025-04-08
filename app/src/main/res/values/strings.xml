@@ -10,4 +10,19 @@
     <string name="reference_image">Reference Image</string>
     <string name="action_menu_button">Action Menu Button</string>
     <string name="action_button_description">Action</string>
+    <string name="key_new_user">new_user</string>
+    <string name="key_selected_user">selected_user</string>
+    <string name="key_delete_user">delete_user</string>
+    <string name="key_drawing_attempts">drawing_attempts</string>
+    <string name="key_export_data">export_data</string>
+    <string name="key_upload_data">upload_data</string>
+    <string name="key_delete_user_data">delete_user_data</string>
+    <string name="key_clear_data">clear_data</string>
+    <string name="key_select_images">select_images</string>
+    <string name="key_data_management">data_management</string>
+    <string name="key_drawing_settings">drawing_settings</string>
+    <string name="key_user_settings">user_settings</string>
+    <string name="key_reset_user_progress">reset_user_progress</string>
+    <string name="key_export_all_data">export_all_data</string>
+    <string name="key_upload_all_data">upload_all_data</string>
 </resources>

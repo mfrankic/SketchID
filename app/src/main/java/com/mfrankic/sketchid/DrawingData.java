@@ -25,6 +25,8 @@ public class DrawingData {
   public Item.Type itemType;
   @ColumnInfo(name = "attempt")
   public int attempt;
+  @ColumnInfo(name = "session_id")
+  public String sessionID;
 
   public DrawingData(
       long time,
@@ -34,7 +36,8 @@ public class DrawingData {
       int userID,
       int imageID,
       Item.Type itemType,
-      int attempt
+      int attempt,
+      String sessionID
   ) {
     this.time = time;
     this.x = x;
@@ -44,9 +47,10 @@ public class DrawingData {
     this.imageID = imageID;
     this.itemType = itemType;
     this.attempt = attempt;
+    this.sessionID = sessionID;
   }
 
   public DrawingData copy() {
-    return new DrawingData(time, x, y, action, userID, imageID, itemType, attempt);
+    return new DrawingData(time, x, y, action, userID, imageID, itemType, attempt, sessionID);
   }
 }

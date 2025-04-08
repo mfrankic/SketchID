@@ -23,4 +23,6 @@
     <color name="surfaceVariant">#e6e3d8</color>
     <color name="onSurfaceVariant">#666354</color>
     <color name="outline">#99947d</color>
+    <color name="primaryRipple">#70C7A914</color>
+    <color name="secondaryRipple">#707640E3</color>
 </resources>

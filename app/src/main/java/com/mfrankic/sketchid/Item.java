@@ -2,15 +2,17 @@ package com.mfrankic.sketchid;
 
 public class Item {
 
-  private final int resource;
+  private final String path;
+  private final String source;
   private final Type type;
   private int id;
   private String name;
 
-  public Item(int id, String name, int resource, Type type) {
+  public Item(int id, String name, String source, String path, Type type) {
     this.id = id;
     this.name = name;
-    this.resource = resource;
+    this.source = source;
+    this.path = path;
     this.type = type;
   }
 
@@ -30,8 +32,12 @@ public class Item {
     this.name = name;
   }
 
-  public int getResource() {
-    return resource;
+  public String getPath() {
+    return path;
+  }
+
+  public String getSource() {
+    return source;
   }
 
   public Type getType() {

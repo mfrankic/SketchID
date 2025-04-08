@@ -14,7 +14,7 @@
         android:src="@drawable/baseline_image_24"
         android:visibility="invisible"
         app:layout_constraintTop_toTopOf="@+id/drawing_activity"
-        app:tint="?attr/colorOnSurface" />
+        app:tint="@color/onSurface" />
 
     <TextView
         android:id="@+id/attempt_progress"
@@ -22,7 +22,7 @@
         android:layout_height="wrap_content"
         android:layout_marginVertical="16dp"
         android:gravity="center"
-        android:textColor="?attr/colorOnSurface"
+        android:textColor="@color/onSurface"
         android:textSize="16sp"
         app:layout_constraintBottom_toTopOf="@+id/drawing_frame"
         app:layout_constraintTop_toBottomOf="@id/reference_image" />
@@ -31,7 +31,7 @@
         android:id="@+id/drawing_frame"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:background="?attr/colorSurface"
+        android:background="@color/surface"
         android:padding="8dp"
         app:layout_constraintBottom_toTopOf="@id/bottom_buttons"
         app:layout_constraintEnd_toEndOf="@id/drawing_activity"
@@ -66,9 +66,9 @@
                 android:id="@+id/btn_clear"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:backgroundTint="?attr/colorPrimary"
+                android:backgroundTint="@color/primary"
                 android:text="@string/clear_canvas"
-                android:textColor="?attr/colorOnPrimary" />
+                android:textColor="@color/onPrimary" />
         </LinearLayout>
 
         <LinearLayout
@@ -81,9 +81,9 @@
                 android:id="@+id/btn_next_image"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:backgroundTint="?attr/colorPrimary"
+                android:backgroundTint="@color/primary"
                 android:text="@string/next_image"
-                android:textColor="?attr/colorOnPrimary" />
+                android:textColor="@color/onPrimary" />
         </LinearLayout>
 
     </LinearLayout>

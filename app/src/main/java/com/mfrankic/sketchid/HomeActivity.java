@@ -1,5 +1,6 @@
 package com.mfrankic.sketchid;
 
+import static com.mfrankic.sketchid.Constants.KEY_DRAWING_ATTEMPTS;
 import static com.mfrankic.sketchid.Constants.KEY_SELECTED_USER;
 
 import android.content.Intent;
@@ -12,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.preference.PreferenceManager;
 
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -27,8 +29,9 @@ public class HomeActivity extends AppCompatActivity {
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
 
-    int theme = PreferenceManager.getDefaultSharedPreferences(this).getInt(Constants.KEY_THEME,
-        AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
+    int theme = PreferenceManager
+        .getDefaultSharedPreferences(this)
+        .getInt(Constants.KEY_THEME, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
 
     switch (theme) {
       case AppCompatDelegate.MODE_NIGHT_YES:
@@ -57,9 +60,36 @@ public class HomeActivity extends AppCompatActivity {
       if (selectedUserID == -1) {
         Toast.makeText(this, "Please select a user before drawing.", Toast.LENGTH_LONG).show();
       } else {
-        Intent intent = new Intent(HomeActivity.this, DrawingActivity.class);
-        intent.putExtra("userID", selectedUser.id);
-        startActivity(intent);
+        // Check if drawing attempts are set
+        String attempts = PreferenceManager
+            .getDefaultSharedPreferences(this)
+            .getString(KEY_DRAWING_ATTEMPTS, "-1");
+        if (attempts.equals("-1")) {
+          Toast
+              .makeText(
+                  this,
+                  "Please set the number of drawing attempts in settings.",
+                  Toast.LENGTH_LONG
+              )
+              .show();
+          return;
+        }
+
+        // Check if there are any selected images before starting the activity
+        Set<Integer> selectedImageIds = SelectedImagesManager.getSelectedImages(this);
+        if (selectedImageIds.isEmpty()) {
+          Toast
+              .makeText(
+                  this,
+                  "No images selected. Please select images in settings.",
+                  Toast.LENGTH_LONG
+              )
+              .show();
+        } else {
+          Intent intent = new Intent(HomeActivity.this, DrawingActivity.class);
+          intent.putExtra("userID", selectedUser.id);
+          startActivity(intent);
+        }
       }
     });
 
@@ -90,8 +120,9 @@ public class HomeActivity extends AppCompatActivity {
   }
 
   private long getSelectedUserID() {
-    String savedUserID = PreferenceManager.getDefaultSharedPreferences(this).getString(
-        KEY_SELECTED_USER, "-1");
+    String savedUserID = PreferenceManager
+        .getDefaultSharedPreferences(this)
+        .getString(KEY_SELECTED_USER, "-1");
     return (savedUserID.equals("-1") || savedUserID.isBlank()) ? -1 : Long.parseLong(savedUserID);
   }
 }

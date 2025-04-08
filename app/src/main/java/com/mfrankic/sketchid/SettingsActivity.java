@@ -58,20 +58,29 @@ public class SettingsActivity extends AppCompatActivity {
       switch (AppCompatDelegate.getDefaultNightMode()) {
         case AppCompatDelegate.MODE_NIGHT_YES:
           AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO);
-          PreferenceManager.getDefaultSharedPreferences(this).edit().putInt(Constants.KEY_THEME,
-              AppCompatDelegate.MODE_NIGHT_NO).apply();
+          PreferenceManager
+              .getDefaultSharedPreferences(this)
+              .edit()
+              .putInt(Constants.KEY_THEME, AppCompatDelegate.MODE_NIGHT_NO)
+              .apply();
           actionButton.setImageResource(R.drawable.outline_light_mode_black_24dp);
           break;
         case AppCompatDelegate.MODE_NIGHT_NO:
           AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM);
-          PreferenceManager.getDefaultSharedPreferences(this).edit().putInt(Constants.KEY_THEME,
-              AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM).apply();
+          PreferenceManager
+              .getDefaultSharedPreferences(this)
+              .edit()
+              .putInt(Constants.KEY_THEME, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+              .apply();
           actionButton.setImageResource(R.drawable.outline_brightness_auto_black_24dp);
           break;
         default:
           AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES);
-          PreferenceManager.getDefaultSharedPreferences(this).edit().putInt(Constants.KEY_THEME,
-              AppCompatDelegate.MODE_NIGHT_YES).apply();
+          PreferenceManager
+              .getDefaultSharedPreferences(this)
+              .edit()
+              .putInt(Constants.KEY_THEME, AppCompatDelegate.MODE_NIGHT_YES)
+              .apply();
           actionButton.setImageResource(R.drawable.outline_dark_mode_black_24dp);
           break;
       }

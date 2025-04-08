@@ -11,8 +11,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase;
 import java.util.List;
 import java.util.concurrent.Executors;
 
-@Database(entities = {DrawingData.class, User.class, Image.class}, version = 12, exportSchema =
-    false)
+@Database(
+    entities = {DrawingData.class, User.class, Image.class}, version = 14, exportSchema = false
+)
 public abstract class AppDatabase extends RoomDatabase {
 
   private static AppDatabase instance;
@@ -23,17 +24,26 @@ public abstract class AppDatabase extends RoomDatabase {
 
       Executors.newSingleThreadExecutor().execute(() -> {
         AppDatabase database = instance;
-
-        List<Image> images = InitialData.getImages();
-        database.imageDao().insertAll(images);
+        if (database != null && database.imageDao().getAllImages().isEmpty()) {
+          List<Image> images = InitialData.getImages();
+          database.imageDao().insertAll(images);
+        }
       });
+    }
+
+    @Override
+    public void onOpen(@NonNull SupportSQLiteDatabase db) {
+      super.onOpen(db);
     }
   };
 
   public static synchronized AppDatabase getInstance(Context context) {
     if (instance == null) {
-      instance = Room.databaseBuilder(context.getApplicationContext(),
-              AppDatabase.class, "drawing_database.db")
+      instance = Room
+          .databaseBuilder(context.getApplicationContext(),
+                           AppDatabase.class,
+                           "drawing_database.db"
+          )
           .fallbackToDestructiveMigration()
           .addCallback(roomDatabaseCallback)
           .build();
