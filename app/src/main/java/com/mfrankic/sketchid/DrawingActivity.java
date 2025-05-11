@@ -6,6 +6,7 @@ import static com.mfrankic.sketchid.Constants.KEY_DRAWING_ATTEMPTS;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.MenuItem;
 import android.view.View;
@@ -26,8 +27,10 @@ import com.google.gson.reflect.TypeToken;
 
 import java.lang.reflect.Type;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -48,6 +51,8 @@ public class DrawingActivity extends AppCompatActivity {
   private Executor executor;
   private int itemAttempts;
   private String sessionId;
+  private UserProgressManager.Session currentSession;
+  private Map<String, Object> drawingSettings;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -92,8 +97,8 @@ public class DrawingActivity extends AppCompatActivity {
         return;
       }
 
-      // Initialize or get the session ID
-      sessionId = UserProgressManager.getUserSessionId(this, selectedUserID);
+      // Get or create a new drawing session for the user
+      initializeSession();
 
       runOnUiThread(this::initializeDrawingActivity);
     });
@@ -113,32 +118,81 @@ public class DrawingActivity extends AppCompatActivity {
   }
 
   private void loadProgress() {
-    // Load user-specific progress
-    UserProgressManager.UserProgress progress = UserProgressManager.loadUserProgress(
-        this,
-        selectedUserID
-    );
-    currentItemIndex = progress.getItemIndex();
-    currentItemAttempt = progress.getItemAttempt();
-    sessionId = progress.getSessionId();
+    if (currentSession != null) {
+      // Load progress from the session
+      currentItemIndex = currentSession.getItemIndex();
+      currentItemAttempt = currentSession.getItemAttempt();
+    } else {
+      // Fallback to legacy method
+      UserProgressManager.UserProgress progress = UserProgressManager.loadUserProgress(
+          this,
+          selectedUserID
+      );
+      currentItemIndex = progress.getItemIndex();
+      currentItemAttempt = progress.getItemAttempt();
+      sessionId = progress.getSessionId();
+    }
   }
 
   private void saveProgress() {
-    // Save user-specific progress
-    UserProgressManager.saveUserProgress(
-        this,
-        selectedUserID,
-        currentItemIndex,
-        currentItemAttempt,
-        sessionId
-    );
+    if (currentSession != null) {
+      // Update session progress
+      UserProgressManager.updateSessionProgress(
+          this,
+          selectedUserID,
+          sessionId,
+          currentItemIndex,
+          currentItemAttempt
+      );
+    } else {
+      // Fallback to legacy method
+      UserProgressManager.saveUserProgress(
+          this,
+          selectedUserID,
+          currentItemIndex,
+          currentItemAttempt,
+          sessionId
+      );
+    }
   }
 
-  private int getDrawingAttemptsFromPreferences() {
-    String attempts = PreferenceManager
-        .getDefaultSharedPreferences(this)
-        .getString(KEY_DRAWING_ATTEMPTS, "-1");
-    return attempts.equals("-1") ? DEFAULT_ATTEMPTS : Integer.parseInt(attempts);
+  private void initializeSession() {
+    // Check for existing sessions
+    List<UserProgressManager.Session> unfinishedSessions
+        = UserProgressManager.getUnfinishedSessions(this, selectedUserID);
+
+    if (!unfinishedSessions.isEmpty()) {
+      // Use the first unfinished session
+      currentSession = unfinishedSessions.get(0);
+    } else {
+      // Create a new session with drawing settings
+      drawingSettings = collectDrawingSettings();
+      currentSession = UserProgressManager.createDrawingSession(
+          this,
+          selectedUserID,
+          drawingSettings
+      );
+    }
+    sessionId = currentSession.getSessionId();
+  }
+
+  private Map<String, Object> collectDrawingSettings() {
+    Map<String, Object> settings = new HashMap<>();
+    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+
+    // Save important drawing settings to the session
+    settings.put("drawing_attempts", itemAttempts);
+    settings.put("time_started", System.currentTimeMillis());
+
+    // Add any other relevant settings
+    Set<Integer> selectedImageIds = SelectedImagesManager.getSelectedImages(this);
+    settings.put("selected_image_ids", new ArrayList<>(selectedImageIds));
+
+    // Add device info
+    settings.put("device_model", Build.MODEL);
+    settings.put("android_version", Build.VERSION.RELEASE);
+
+    return settings;
   }
 
   private void initializeDrawingActivity() {
@@ -172,6 +226,9 @@ public class DrawingActivity extends AppCompatActivity {
 
       saveDrawingToDatabase();
 
+      // Track that user tapped next image
+      UserProgressManager.recordNextImage(this, selectedUserID, sessionId);
+
       currentItemAttempt++;
 
       if (currentItemAttempt > itemAttempts) {
@@ -188,9 +245,12 @@ public class DrawingActivity extends AppCompatActivity {
         reInitializeDrawingView();
         updateProgressText();
       } else {
-        // Drawing session completed, mark user as finished and clear progress
+        // Drawing session completed, mark session as finished
+        UserProgressManager.markSessionFinished(this, selectedUserID, sessionId);
+
+        // Legacy: Mark user as finished and clear progress
         UserProgressManager.markUserAsFinished(this, selectedUserID);
-        UserProgressManager.clearUserProgress(this, selectedUserID);
+
         // Also clear global progress keys for backward compatibility
         resetGlobalProgress();
 
@@ -375,6 +435,13 @@ public class DrawingActivity extends AppCompatActivity {
       drawingDataList.clear();
       startTimestamp = null;
     });
+  }
+
+  private int getDrawingAttemptsFromPreferences() {
+    String attempts = PreferenceManager
+        .getDefaultSharedPreferences(this)
+        .getString(KEY_DRAWING_ATTEMPTS, "-1");
+    return attempts.equals("-1") ? DEFAULT_ATTEMPTS : Integer.parseInt(attempts);
   }
 
   @Override

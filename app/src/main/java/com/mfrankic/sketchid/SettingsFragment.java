@@ -236,7 +236,16 @@ public class SettingsFragment extends PreferenceFragmentCompat {
             requireActivity().runOnUiThread(() -> Toast
                 .makeText(getContext(), "User deleted", Toast.LENGTH_LONG)
                 .show());
+
+            // Delete user's drawing data from the database
             db.drawingDataDao().deleteDrawingDataByUserID(Long.parseLong(selectedUserID));
+
+            // Delete user's session data
+            UserProgressManager.deleteUserSessions(
+                requireContext(),
+                Long.parseLong(selectedUserID)
+            );
+
             PreferenceManager
                 .getDefaultSharedPreferences(requireContext())
                 .edit()
@@ -864,7 +873,24 @@ public class SettingsFragment extends PreferenceFragmentCompat {
             long userId = progress.getUserId();
             String sessionId = progress.getSessionId();
 
-            // Use the session ID for precise data deletion
+            // Get all unfinished sessions for this user
+            List<UserProgressManager.Session> unfinishedSessions
+                = UserProgressManager.getUnfinishedSessions(requireContext(), userId);
+
+            // Mark all sessions as finished
+            for (UserProgressManager.Session session : unfinishedSessions) {
+              // Mark the session as finished
+              UserProgressManager.markSessionFinished(
+                  requireContext(),
+                  userId,
+                  session.getSessionId()
+              );
+
+              // Delete drawing data for this session from the database
+              db.drawingDataDao().deleteUserSessionData(userId, session.getSessionId());
+            }
+
+            // For backward compatibility: use the legacy session ID if provided
             if (sessionId != null) {
               // Delete only the data for this specific session
               db.drawingDataDao().deleteUserSessionData(userId, sessionId);
