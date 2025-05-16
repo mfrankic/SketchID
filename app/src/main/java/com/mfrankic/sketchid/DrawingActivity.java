@@ -1,8 +1,26 @@
 package com.mfrankic.sketchid;
 
+import static com.mfrankic.sketchid.Constants.ACTION_END;
+import static com.mfrankic.sketchid.Constants.ACTION_START;
+import static com.mfrankic.sketchid.Constants.DEFAULT_ATTEMPTS;
+import static com.mfrankic.sketchid.Constants.DIALOG_MSG_EXIT_DRAWING;
+import static com.mfrankic.sketchid.Constants.DIALOG_TITLE_EXIT_DRAWING;
+import static com.mfrankic.sketchid.Constants.DRAWING_KEY_ANDROID_VERSION;
+import static com.mfrankic.sketchid.Constants.DRAWING_KEY_ATTEMPTS;
+import static com.mfrankic.sketchid.Constants.DRAWING_KEY_DEVICE_MODEL;
+import static com.mfrankic.sketchid.Constants.DRAWING_KEY_SELECTED_IMAGE_IDS;
+import static com.mfrankic.sketchid.Constants.DRAWING_KEY_TIME_STARTED;
+import static com.mfrankic.sketchid.Constants.FORMAT_PROGRESS_TEXT;
 import static com.mfrankic.sketchid.Constants.KEY_CURRENT_ITEM_ATTEMPT;
 import static com.mfrankic.sketchid.Constants.KEY_CURRENT_ITEM_INDEX;
 import static com.mfrankic.sketchid.Constants.KEY_DRAWING_ATTEMPTS;
+import static com.mfrankic.sketchid.Constants.NO_BUTTON;
+import static com.mfrankic.sketchid.Constants.PREF_IMAGE_ORDER;
+import static com.mfrankic.sketchid.Constants.SOURCE_DEFAULT;
+import static com.mfrankic.sketchid.Constants.TOAST_INVALID_USER;
+import static com.mfrankic.sketchid.Constants.TOAST_NO_DRAWING;
+import static com.mfrankic.sketchid.Constants.TOAST_NO_IMAGES_SETTINGS;
+import static com.mfrankic.sketchid.Constants.YES_BUTTON;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -36,7 +54,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 public class DrawingActivity extends AppCompatActivity {
-  private static final int DEFAULT_ATTEMPTS = 4;
   private final List<Item> items = new ArrayList<>();
   private final List<DrawingData> drawingDataList = new ArrayList<>();
   private FrameLayout drawingLayout;
@@ -52,7 +69,7 @@ public class DrawingActivity extends AppCompatActivity {
   private int itemAttempts;
   private String sessionId;
   private UserProgressManager.Session currentSession;
-  private Map<String, Object> drawingSettings;
+  private Button nextImageButton;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -64,19 +81,7 @@ public class DrawingActivity extends AppCompatActivity {
       getSupportActionBar().setDisplayShowHomeEnabled(true);
     }
 
-    getOnBackPressedDispatcher().addCallback(
-        this, new OnBackPressedCallback(true) {
-          @Override
-          public void handleOnBackPressed() {
-            new AlertDialog.Builder(DrawingActivity.this)
-                .setTitle("Exit Drawing")
-                .setMessage("Are you sure you want to exit?")
-                .setPositiveButton("Yes", (dialog, which) -> DrawingActivity.super.finish())
-                .setNegativeButton("No", null)
-                .show();
-          }
-        }
-    );
+    setupBackHandler();
 
     db = AppDatabase.getInstance(this);
     executor = Executors.newSingleThreadExecutor();
@@ -89,9 +94,7 @@ public class DrawingActivity extends AppCompatActivity {
     executor.execute(() -> {
       if (selectedUserID == -1 || db.userDao().getUserByID(selectedUserID) == null) {
         runOnUiThread(() -> {
-          Toast
-              .makeText(this, "Invalid user selected. Returning to Home.", Toast.LENGTH_LONG)
-              .show();
+          Toast.makeText(this, TOAST_INVALID_USER, Toast.LENGTH_LONG).show();
           finish();
         });
         return;
@@ -134,6 +137,22 @@ public class DrawingActivity extends AppCompatActivity {
     }
   }
 
+  private void updateProgressText() {
+    int currentOverallAttempt = (currentItemIndex * itemAttempts) + currentItemAttempt;
+    int totalAttempts = itemAttempts * items.size();
+
+    String progressText = String.format(
+        Locale.getDefault(),
+        FORMAT_PROGRESS_TEXT,
+        currentItemAttempt,
+        itemAttempts,
+        currentOverallAttempt,
+        totalAttempts
+    );
+    TextView attemptProgressText = findViewById(R.id.attempt_progress);
+    attemptProgressText.setText(progressText);
+  }
+
   private void saveProgress() {
     if (currentSession != null) {
       // Update session progress
@@ -156,6 +175,26 @@ public class DrawingActivity extends AppCompatActivity {
     }
   }
 
+  private void setupBackHandler() {
+    getOnBackPressedDispatcher().addCallback(
+        this, new OnBackPressedCallback(true) {
+          @Override
+          public void handleOnBackPressed() {
+            showExitConfirmationDialog();
+          }
+        }
+    );
+  }
+
+  private void showExitConfirmationDialog() {
+    new AlertDialog.Builder(DrawingActivity.this)
+        .setTitle(DIALOG_TITLE_EXIT_DRAWING)
+        .setMessage(DIALOG_MSG_EXIT_DRAWING)
+        .setPositiveButton(YES_BUTTON, (dialog, which) -> DrawingActivity.super.finish())
+        .setNegativeButton(NO_BUTTON, null)
+        .show();
+  }
+
   private void initializeSession() {
     // Check for existing sessions
     List<UserProgressManager.Session> unfinishedSessions
@@ -166,11 +205,10 @@ public class DrawingActivity extends AppCompatActivity {
       currentSession = unfinishedSessions.get(0);
     } else {
       // Create a new session with drawing settings
-      drawingSettings = collectDrawingSettings();
       currentSession = UserProgressManager.createDrawingSession(
           this,
           selectedUserID,
-          drawingSettings
+          collectDrawingSettings()
       );
     }
     sessionId = currentSession.getSessionId();
@@ -178,90 +216,115 @@ public class DrawingActivity extends AppCompatActivity {
 
   private Map<String, Object> collectDrawingSettings() {
     Map<String, Object> settings = new HashMap<>();
-    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
 
     // Save important drawing settings to the session
-    settings.put("drawing_attempts", itemAttempts);
-    settings.put("time_started", System.currentTimeMillis());
+    settings.put(DRAWING_KEY_ATTEMPTS, itemAttempts);
+    settings.put(DRAWING_KEY_TIME_STARTED, System.currentTimeMillis());
 
     // Add any other relevant settings
     Set<Integer> selectedImageIds = SelectedImagesManager.getSelectedImages(this);
-    settings.put("selected_image_ids", new ArrayList<>(selectedImageIds));
+    settings.put(DRAWING_KEY_SELECTED_IMAGE_IDS, new ArrayList<>(selectedImageIds));
 
     // Add device info
-    settings.put("device_model", Build.MODEL);
-    settings.put("android_version", Build.VERSION.RELEASE);
+    settings.put(DRAWING_KEY_DEVICE_MODEL, Build.MODEL);
+    settings.put(DRAWING_KEY_ANDROID_VERSION, Build.VERSION.RELEASE);
 
     return settings;
   }
 
   private void initializeDrawingActivity() {
+    findAndSetupViews();
+    executor.execute(this::loadItems);
+    reInitializeDrawingView();
+    setupButtonListeners();
+  }
+
+  private void findAndSetupViews() {
     drawingLayout = findViewById(R.id.drawing_frame);
     drawingView = findViewById(R.id.drawing_view);
     drawingViewParams = (ViewGroup.MarginLayoutParams) drawingView.getLayoutParams();
     referenceImage = findViewById(R.id.reference_image);
+    nextImageButton = findViewById(R.id.btn_next_image);
+  }
 
-    Button nextImageButton = findViewById(R.id.btn_next_image);
+  private void setupButtonListeners() {
+    setupNextImageButton();
+    setupClearButton();
+  }
+
+  private void setupNextImageButton() {
+    nextImageButton.setOnClickListener(v -> handleNextImageClick());
+  }
+
+  private void handleNextImageClick() {
+    if (drawingDataList.isEmpty()) {
+      Toast.makeText(this, TOAST_NO_DRAWING, Toast.LENGTH_LONG).show();
+      return;
+    }
+
+    finalizeCurrentDrawing();
+    updateDrawingProgress();
+    proceedToNextDrawing();
+  }
+
+  private void finalizeCurrentDrawing() {
+    // Add END action to the drawing data
+    DrawingData lastDrawingData = drawingDataList.get(drawingDataList.size() - 1).copy();
+    lastDrawingData.action = ACTION_END;
+    drawingDataList.add(lastDrawingData);
+
+    // Save data and record progress
+    saveDrawingToDatabase();
+    UserProgressManager.recordNextImage(this, selectedUserID, sessionId);
+  }
+
+  private void updateDrawingProgress() {
+    // Update attempt counters
+    currentItemAttempt++;
+
+    if (currentItemAttempt > itemAttempts) {
+      currentItemAttempt = 1;
+      currentItemIndex++;
+    }
+
+    // Update UI for last item
+    if (currentItemIndex == (items.size() - 1) && currentItemAttempt == itemAttempts) {
+      nextImageButton.setText(R.string.finish);
+    }
+  }
+
+  private void proceedToNextDrawing() {
+    if (currentItemIndex < items.size()) {
+      // Continue with next image
+      loadCurrentItem();
+      reInitializeDrawingView();
+      updateProgressText();
+    } else {
+      // Complete the drawing session
+      completeDrawingSession();
+    }
+  }
+
+  private void completeDrawingSession() {
+    // Mark session as finished
+    UserProgressManager.markSessionFinished(this, selectedUserID, sessionId);
+
+    // Legacy: Mark user as finished and clear progress
+    UserProgressManager.markUserAsFinished(this, selectedUserID);
+
+    // Also clear global progress keys for backward compatibility
+    resetGlobalProgress();
+
+    // Reset state and navigate to home
+    currentItemIndex = 0;
+    currentItemAttempt = 1;
+    Intent intent = new Intent(DrawingActivity.this, HomeActivity.class);
+    startActivity(intent);
+    finish();
+  }
+
+  private void setupClearButton() {
     Button clearButton = findViewById(R.id.btn_clear);
-
-    executor.execute(this::loadItems);
-
-    reInitializeDrawingView();
-
-    nextImageButton.setOnClickListener(v -> {
-      if (drawingDataList.isEmpty()) {
-        Toast
-            .makeText(
-                this,
-                "Please draw something before moving to the next image.",
-                Toast.LENGTH_LONG
-            )
-            .show();
-        return;
-      }
-
-      DrawingData lastDrawingData = drawingDataList.get(drawingDataList.size() - 1).copy();
-      lastDrawingData.action = "END";
-      drawingDataList.add(lastDrawingData);
-
-      saveDrawingToDatabase();
-
-      // Track that user tapped next image
-      UserProgressManager.recordNextImage(this, selectedUserID, sessionId);
-
-      currentItemAttempt++;
-
-      if (currentItemAttempt > itemAttempts) {
-        currentItemAttempt = 1;
-        currentItemIndex++;
-      }
-
-      if (currentItemIndex == (items.size() - 1) && currentItemAttempt == itemAttempts) {
-        nextImageButton.setText(R.string.finish);
-      }
-
-      if (currentItemIndex < items.size()) {
-        loadCurrentItem();
-        reInitializeDrawingView();
-        updateProgressText();
-      } else {
-        // Drawing session completed, mark session as finished
-        UserProgressManager.markSessionFinished(this, selectedUserID, sessionId);
-
-        // Legacy: Mark user as finished and clear progress
-        UserProgressManager.markUserAsFinished(this, selectedUserID);
-
-        // Also clear global progress keys for backward compatibility
-        resetGlobalProgress();
-
-        currentItemIndex = 0;
-        currentItemAttempt = 1;
-        Intent intent = new Intent(DrawingActivity.this, HomeActivity.class);
-        startActivity(intent);
-        finish();
-      }
-    });
-
     clearButton.setOnClickListener(v -> {
       reInitializeDrawingView();
       drawingDataList.clear();
@@ -274,6 +337,10 @@ public class DrawingActivity extends AppCompatActivity {
     drawingView = new CustomDrawingView(this, null);
     drawingView.setLayoutParams(drawingViewParams);
     drawingLayout.addView(drawingView);
+    setupDrawingStrokeListener();
+  }
+
+  private void setupDrawingStrokeListener() {
     drawingView.setOnStrokeListener((x, y, timestamp, action) -> {
       long time = (startTimestamp == null) ? 0 : (timestamp - startTimestamp);
       int currentItemID = items.get(currentItemIndex).getId();
@@ -281,141 +348,155 @@ public class DrawingActivity extends AppCompatActivity {
 
       int imageID = (currentItemType == Item.Type.IMAGE) ? currentItemID : -1;
 
+      // Create initial START event if this is the first point
       if (currentItemID != -1 && drawingDataList.isEmpty()) {
         startTimestamp = timestamp;
-        drawingDataList.add(new DrawingData(
-            time,
-            x,
-            y,
-            "START",
-            selectedUserID,
-            imageID,
-            items.get(currentItemIndex).getType(),
-            currentItemAttempt,
-            sessionId
-        ));
+        createDrawingDataPoint(time, x, y, ACTION_START, imageID, currentItemType);
       }
 
-      drawingDataList.add(new DrawingData(
-          time,
-          x,
-          y,
-          action,
-          selectedUserID,
-          imageID,
-          items.get(currentItemIndex).getType(),
-          currentItemAttempt,
-          sessionId
-      ));
+      // Always add the current point with the provided action
+      createDrawingDataPoint(time, x, y, action, imageID, currentItemType);
     });
   }
 
+  private void createDrawingDataPoint(
+      long time,
+      float x,
+      float y,
+      String action,
+      int imageID,
+      Item.Type itemType
+  ) {
+    drawingDataList.add(new DrawingData.Builder()
+                            .time(time)
+                            .x(x)
+                            .y(y)
+                            .action(action)
+                            .userID(selectedUserID)
+                            .imageID(imageID)
+                            .itemType(itemType)
+                            .attempt(currentItemAttempt)
+                            .sessionID(sessionId)
+                            .build());
+  }
+
   private void loadItems() {
+    // Get raw data
     List<Image> allImages = db.imageDao().getAllImages();
     Set<Integer> selectedImageIds = SelectedImagesManager.getSelectedImages(this);
 
+    // Filter to selected images
     items.clear();
+    List<Image> selectedImages = getSelectedImages(allImages, selectedImageIds);
+
+    // Process ordering
+    List<Image> orderedImages = orderImages(selectedImages);
+
+    // Convert to items
+    for (Image image : orderedImages) {
+      items.add(new Item(image.id, image.name, image.source, image.path, Item.Type.IMAGE));
+    }
+
+    // Update UI
+    updateUIWithItems();
+  }
+
+  private List<Image> getSelectedImages(List<Image> allImages, Set<Integer> selectedImageIds) {
     List<Image> selectedImages = new ArrayList<>();
     for (Image image : allImages) {
       if (selectedImageIds.contains(image.id)) {
         selectedImages.add(image);
       }
     }
+    return selectedImages;
+  }
 
-    // Check if random order is enabled
-    SharedPreferences prefs = getSharedPreferences("image_order", MODE_PRIVATE);
-    boolean isRandomOrder = prefs.getBoolean("random_order", false);
+  private List<Image> orderImages(List<Image> selectedImages) {
+    SharedPreferences prefs = getSharedPreferences(PREF_IMAGE_ORDER, MODE_PRIVATE);
 
-    if (isRandomOrder) {
-      // Shuffle the selected images
-      java.util.Collections.shuffle(selectedImages);
-    } else {
-      // Get saved order
-      String json = prefs.getString("image_order", null);
-      if (json != null) {
-        Gson gson = new Gson();
-        Type type = new TypeToken<List<Integer>>() {
-        }.getType();
-        List<Integer> savedOrder = gson.fromJson(json, type);
+    return applySavedOrder(selectedImages, prefs);
+  }
 
-        if (savedOrder != null && !savedOrder.isEmpty()) {
-          // Sort images according to saved order
-          List<Image> orderedImages = new ArrayList<>();
-          for (Integer id : savedOrder) {
-            for (Image image : selectedImages) {
-              if (image.id == id) {
-                orderedImages.add(image);
-                break;
-              }
-            }
-          }
-          // Add any new images that weren't in the saved order
-          for (Image image : selectedImages) {
-            if (!orderedImages.contains(image)) {
-              orderedImages.add(image);
-            }
-          }
-          selectedImages = orderedImages;
+  private List<Image> applySavedOrder(List<Image> selectedImages, SharedPreferences prefs) {
+    String json = prefs.getString(PREF_IMAGE_ORDER, null);
+    if (json == null) {
+      return selectedImages;
+    }
+
+    try {
+      List<Integer> savedOrder = parseOrderJson(json);
+      if (savedOrder == null || savedOrder.isEmpty()) {
+        return selectedImages;
+      }
+
+      return createOrderedImageList(selectedImages, savedOrder);
+    } catch (Exception e) {
+      return selectedImages;
+    }
+  }
+
+  private List<Integer> parseOrderJson(String json) {
+    Gson gson = new Gson();
+    Type type = new TypeToken<List<Integer>>() {
+    }.getType();
+    return gson.fromJson(json, type);
+  }
+
+  private List<Image> createOrderedImageList(List<Image> selectedImages, List<Integer> savedOrder) {
+    List<Image> orderedImages = new ArrayList<>();
+
+    // First add images in specified order
+    for (Integer id : savedOrder) {
+      for (Image image : selectedImages) {
+        if (image.id == id) {
+          orderedImages.add(image);
+          break;
         }
       }
     }
 
+    // Add any new images that weren't in the saved order
     for (Image image : selectedImages) {
-      items.add(new Item(image.id, image.name, image.source, image.path, Item.Type.IMAGE));
+      if (!orderedImages.contains(image)) {
+        orderedImages.add(image);
+      }
     }
 
+    return orderedImages;
+  }
+
+  private void updateUIWithItems() {
     executor.execute(() -> runOnUiThread(() -> {
       if (!items.isEmpty()) {
         loadCurrentItem();
         updateProgressText();
       } else {
-        Toast
-            .makeText(
-                this,
-                "No images selected. Please select images in settings.",
-                Toast.LENGTH_LONG
-            )
-            .show();
+        Toast.makeText(this, TOAST_NO_IMAGES_SETTINGS, Toast.LENGTH_LONG).show();
         finish();
       }
     }));
   }
 
-  private void updateProgressText() {
-    int currentOverallAttempt = (currentItemIndex * itemAttempts) + currentItemAttempt;
-    int totalAttempts = itemAttempts * items.size();
-
-    String progressText = String.format(
-        Locale.getDefault(),
-        "Attempt: %d/%d\tOverall: %d/%d",
-        currentItemAttempt,
-        itemAttempts,
-        currentOverallAttempt,
-        totalAttempts
-    );
-    TextView attemptProgressText = findViewById(R.id.attempt_progress);
-    attemptProgressText.setText(progressText);
-  }
-
   private void loadCurrentItem() {
     Item currentItem = items.get(currentItemIndex);
 
-    switch (currentItem.getType()) {
-      case IMAGE:
-        if (currentItem.getSource().equals("default")) {
-          referenceImage.setImageTintList(getResources().getColorStateList(
-              R.color.onSurface,
-              null
-          ));
-          int resourceId = Integer.parseInt(currentItem.getPath());
-          referenceImage.setImageResource(resourceId);
-        } else {
-          referenceImage.setImageTintList(null);
-          referenceImage.setImageURI(android.net.Uri.parse(currentItem.getPath()));
-        }
-        referenceImage.setVisibility(View.VISIBLE);
-        break;
+    if (currentItem.getType() == Item.Type.IMAGE) {
+      displayImageItem(currentItem);
     }
+  }
+
+  private void displayImageItem(Item currentItem) {
+    if (currentItem.getSource().equals(SOURCE_DEFAULT)) {
+      // Default image from resources
+      referenceImage.setImageTintList(getResources().getColorStateList(R.color.onSurface, null));
+      int resourceId = Integer.parseInt(currentItem.getPath());
+      referenceImage.setImageResource(resourceId);
+    } else {
+      // Custom image from URI
+      referenceImage.setImageTintList(null);
+      referenceImage.setImageURI(android.net.Uri.parse(currentItem.getPath()));
+    }
+    referenceImage.setVisibility(View.VISIBLE);
   }
 
   // Method to reset global progress keys used by legacy code
@@ -454,18 +535,13 @@ public class DrawingActivity extends AppCompatActivity {
   }
 
   @Override
-  protected void onDestroy() {
+  public void onDestroy() {
     super.onDestroy();
   }
 
   @Override
   public boolean onSupportNavigateUp() {
-    onBackPressed();
-    return true;
-  }
-
-  @Override
-  public void onBackPressed() {
     getOnBackPressedDispatcher().onBackPressed();
+    return true;
   }
 }

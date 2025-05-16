@@ -15,10 +15,11 @@
         android:padding="8dp">
 
         <ImageView
-            android:id="@+id/imageView"
+            android:id="@+id/image_thumbnail"
             android:layout_width="64dp"
             android:layout_height="64dp"
-            android:scaleType="centerCrop" />
+            android:contentDescription="@string/image_icon_description"
+            android:scaleType="centerInside" />
 
         <TextView
             android:id="@+id/imageName"
@@ -37,17 +38,18 @@
             android:layout_height="48dp"
             android:layout_gravity="center_vertical"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Unselect image"
+            android:contentDescription="@string/unselect_image"
             android:src="@android:drawable/ic_menu_close_clear_cancel" />
 
-        <ImageButton
+        <com.mfrankic.sketchid.DraggableImageButton
             android:id="@+id/dragHandle"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:layout_gravity="center_vertical"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Drag to reorder"
-            android:src="@android:drawable/ic_menu_sort_by_size" />
+            android:contentDescription="@string/drag_to_reorder"
+            android:src="@drawable/ic_drag_handle"
+            android:tint="@color/primary" />
 
     </LinearLayout>
 

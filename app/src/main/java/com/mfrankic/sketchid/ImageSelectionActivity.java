@@ -1,84 +1,73 @@
 package com.mfrankic.sketchid;
 
+import static com.mfrankic.sketchid.Constants.ERROR_NAME_EMPTY;
+import static com.mfrankic.sketchid.Constants.PREF_IMAGE_ORDER;
+import static com.mfrankic.sketchid.Constants.SOURCE_CUSTOM;
+import static com.mfrankic.sketchid.Constants.SOURCE_DEFAULT;
+
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
+import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.ColorUtils;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
-import com.google.android.material.switchmaterial.SwitchMaterial;
 import com.google.android.material.textfield.TextInputLayout;
 import com.google.gson.Gson;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
-public class ImageSelectionActivity extends AppCompatActivity {
-  private static final String PREF_NAME = "image_order";
-  private static final String KEY_RANDOM_ORDER = "random_order";
+public class ImageSelectionActivity extends BaseActivity {
+  private static final String PREF_NAME = PREF_IMAGE_ORDER;
 
   private final List<Image> allImages = new ArrayList<>();
-  private final List<Image> selectedImages = new ArrayList<>();
-  private RecyclerView recyclerViewUnselected;
+  private List<Image> selectedImages = new ArrayList<>();
   private RecyclerView recyclerViewSelected;
   private TextView textViewSelected;
   private TextView textViewSelectedNumber;
-  private TextView textViewReorderingDisabled;
-  private SwitchMaterial switchRandomOrder;
   private ImageAdapter unselectedAdapter;
   private ImageOrderAdapter selectedAdapter;
   private AppDatabase db;
   private Executor executor;
-  private final ActivityResultLauncher<String> pickImageLauncher = registerForActivityResult(
-      new ActivityResultContracts.GetMultipleContents(), uris -> {
-        if (uris != null && !uris.isEmpty()) {
-          for (Uri uri : uris) {
-            try {
-              getContentResolver().takePersistableUriPermission(
-                  uri,
-                  Intent.FLAG_GRANT_READ_URI_PERMISSION
-              );
-              handleNewImageSelection(uri);
-            } catch (SecurityException e) {
-              Toast
-                  .makeText(this, "Failed to get permission for: " + uri, Toast.LENGTH_SHORT)
-                  .show();
-            }
-          }
-        }
-      }
+  private final ActivityResultLauncher<String> pickImageLauncher
+      = registerForActivityResult(
+      new ActivityResultContracts.GetMultipleContents(),
+      this::handleMultipleImageSelection
   );
+  // Keep track of initial state to restore if user cancels
+  private List<Image> initialSelectedImages = new ArrayList<>();
   private View btnAddImage;
   private boolean hasChanges = false;
   private View multiSelectControls;
@@ -93,58 +82,46 @@ public class ImageSelectionActivity extends AppCompatActivity {
     if (getSupportActionBar() != null) {
       getSupportActionBar().setDisplayHomeAsUpEnabled(true);
       getSupportActionBar().setDisplayShowHomeEnabled(true);
+      getSupportActionBar().setTitle("Select Images");
     }
 
     db = AppDatabase.getInstance(this);
     executor = Executors.newSingleThreadExecutor();
 
-    // Setup multi-select controls
+    // Setup back press handling
+    setupBackPressHandler();
+
+    // Multi-select mode controls
     multiSelectControls = findViewById(R.id.multiSelectControls);
+    Button btnAddToSelection = findViewById(R.id.btnAddToSelection);
+    Button btnRemoveSelected = findViewById(R.id.btnRemoveSelected);
+    Button btnExitMultiSelect = findViewById(R.id.btnExitMultiSelect);
     checkboxSelectAll = findViewById(R.id.checkboxSelectAll);
+
     checkboxSelectAll.setOnClickListener(v -> handleSelectAllCheckboxClick());
+    btnAddToSelection.setOnClickListener(v -> addSelectedImagesToSelection());
+    btnRemoveSelected.setOnClickListener(v -> showRemoveConfirmationDialog());
+    btnExitMultiSelect.setOnClickListener(v -> exitMultiSelectMode());
 
-    findViewById(R.id.btnAddToSelection).setOnClickListener(v -> addSelectedImagesToSelection());
-    findViewById(R.id.btnRemoveSelected).setOnClickListener(v -> showRemoveConfirmationDialog());
-    findViewById(R.id.btnExitMultiSelect).setOnClickListener(v -> exitMultiSelectMode());
-
-    // Setup unselected images RecyclerView
-    recyclerViewUnselected = findViewById(R.id.recyclerViewUnselected);
+    // Setup unselected images section
+    RecyclerView recyclerViewUnselected = findViewById(R.id.recyclerViewUnselected);
     int spanCount = calculateSpanCount();
-    recyclerViewUnselected.setLayoutManager(new GridLayoutManager(this, spanCount));
-    int spacingInPixels = getResources().getDimensionPixelSize(R.dimen.grid_spacing);
-    recyclerViewUnselected.addItemDecoration(new GridSpacingItemDecoration(
-        spanCount,
-                                                                           spacingInPixels,
-                                                                           true
-    ));
-    unselectedAdapter = new ImageAdapter(
-        new ArrayList<>(),
-                                         this::handleImageSelection,
-                                         this::showImageOptionsDialog,
-                                         this::handleImageLongClick
-    );
+    GridLayoutManager layoutManager = new GridLayoutManager(this, spanCount);
+    recyclerViewUnselected.setLayoutManager(layoutManager);
+    recyclerViewUnselected.addItemDecoration(new StableGridSpacingDecoration(getResources().getDimensionPixelSize(
+        R.dimen.grid_spacing) / 2));
 
-    unselectedAdapter.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
-      @Override
-      public void onChanged() {
-        updateSelectAllCheckboxState();
-      }
-    });
-
-    recyclerViewUnselected.setAdapter(unselectedAdapter);
+    // Setup the adapter for unselected images
+    setupUnselectedAdapter();
 
     // Setup selected images section
     textViewSelected = findViewById(R.id.textViewSelected);
     textViewSelectedNumber = findViewById(R.id.textViewSelectedNumber);
-    textViewReorderingDisabled = findViewById(R.id.textViewReorderingDisabled);
     recyclerViewSelected = findViewById(R.id.recyclerViewSelected);
     recyclerViewSelected.setLayoutManager(new LinearLayoutManager(this));
     selectedAdapter = new ImageOrderAdapter(this, selectedImages);
     selectedAdapter.setOnImageUnselectListener(this::handleImageSelection);
-    selectedAdapter.setOnReorderListener(() -> {
-      hasChanges = true;
-      saveImageOrder();
-    });
+    selectedAdapter.setOnReorderListener(this::saveImageOrder);
     recyclerViewSelected.setAdapter(selectedAdapter);
     selectedAdapter.attachToRecyclerView(recyclerViewSelected);
 
@@ -152,61 +129,38 @@ public class ImageSelectionActivity extends AppCompatActivity {
     btnAddImage = findViewById(R.id.btnAddImage);
     btnAddImage.setOnClickListener(v -> openImagePicker());
 
-    // Setup random order switch
-    switchRandomOrder = findViewById(R.id.switch_random_order);
-    switchRandomOrder.setChecked(isRandomOrderEnabled());
+    // Load images from database
+    executor.execute(() -> {
+      db.imageDao().deleteInvalidCustomImages();
 
-    // Style the switch with theme colors
-    int primaryColor = getResources().getColor(R.color.primary, getTheme());
-    int trackColor = ColorUtils.setAlphaComponent(
-        primaryColor,
-        128
-    ); // Semi-transparent primary color
-
-    // Create color state lists for thumb and track
-    ColorStateList thumbColorStateList = new ColorStateList(
-        new int[][]{
-            new int[]{android.R.attr.state_checked}, new int[]{}
-        }, new int[]{
-        primaryColor,         // Checked state - primary color
-        Color.LTGRAY          // Unchecked state - light gray
-    }
-    );
-
-    ColorStateList trackColorStateList = new ColorStateList(
-        new int[][]{
-            new int[]{android.R.attr.state_checked}, new int[]{}
-        }, new int[]{
-        trackColor,           // Checked state - semi-transparent primary
-        Color.GRAY            // Unchecked state - gray
-    }
-    );
-
-    switchRandomOrder.setThumbTintList(thumbColorStateList);
-    switchRandomOrder.setTrackTintList(trackColorStateList);
-
-    // Make sure the reordering disabled text is initially set to correct visibility
-    textViewReorderingDisabled.setVisibility(switchRandomOrder.isChecked()
-                                             ? View.VISIBLE
-                                             : View.GONE);
-
-    switchRandomOrder.setOnCheckedChangeListener((buttonView, isChecked) -> {
-      saveRandomOrderPreference(isChecked);
-
-      // Toggle visibility of the reordering disabled text
-      textViewReorderingDisabled.setVisibility(isChecked ? View.VISIBLE : View.GONE);
-
-      updateSelectedSectionVisibility();
+      // Load images and apply changes on the UI thread
+      List<Image> fetchedImages = fetchAllImages();
+      processLoadedImages(fetchedImages);
     });
+  }
 
-    // Initially show the selected section
-    textViewSelected.setVisibility(View.VISIBLE);
-    updateSelectedSectionVisibility();
-
-    loadImages();
-
-    // Initialize multi-select controls
-    updateMultiSelectControlsVisibility();
+  /**
+   * Setup the back press handler using the modern OnBackPressedCallback approach
+   */
+  private void setupBackPressHandler() {
+    getOnBackPressedDispatcher().addCallback(
+        this, new OnBackPressedCallback(true) {
+          @Override
+          public void handleOnBackPressed() {
+            if (isMultiSelectMode) {
+              exitMultiSelectMode();
+            } else if (hasChanges) {
+              showExitConfirmationDialog();
+            } else {
+              // Disable this callback to allow the system to handle the back press
+              this.setEnabled(false);
+              getOnBackPressedDispatcher().onBackPressed();
+              // Re-enable the callback for future back presses
+              this.setEnabled(true);
+            }
+          }
+        }
+    );
   }
 
   private void updateSelectAllCheckboxState() {
@@ -276,40 +230,137 @@ public class ImageSelectionActivity extends AppCompatActivity {
     for (Image image : unselectedList) {
       unselectedAdapter.toggleImageSelection(image);
     }
+
+    // Update checkbox state after changing selections
+    updateSelectAllCheckboxState();
   }
 
   private void handleImageSelection(Image image) {
-    if (selectedImages.contains(image)) {
-      selectedImages.remove(image);
+    // Step 1: Process the selection
+    processImageSelectionToggle(image);
 
-      // Save the new order if we're not in random mode
-      if (!switchRandomOrder.isChecked()) {
-        saveImageOrder();
-      }
-    } else {
-      selectedImages.add(image);
+    // Step 2: Update unselected list
+    updateUnselectedImages();
 
-      // Save the new order if we're not in random mode
-      if (!switchRandomOrder.isChecked()) {
-        saveImageOrder();
+    // Step 3: Track order changes but don't save to preferences yet
+    saveImageOrder();
+
+    // Step 4: Update UI
+    updateUIAfterImageSelection();
+  }
+
+  private void processImageSelectionToggle(Image image) {
+    // Step 1: Get currently selected images from the adapter
+    List<Image> currentlySelected = getCurrentlySelectedImages();
+
+    // Step 2: Create a completely new list and toggle the selection
+    boolean wasSelected = isImageAlreadySelected(image, currentlySelected);
+    List<Image> newSelectedList = toggleImageInSelection(image, currentlySelected, wasSelected);
+
+    // Step 3: Officially update the selectedImages variable
+    selectedImages = newSelectedList;
+
+    // Step 4: Create a verified adapter list and update the adapter
+    updateSelectionAdapter(newSelectedList);
+  }
+
+  private List<Image> getCurrentlySelectedImages() {
+    List<Image> currentlySelected = new ArrayList<>();
+    if (selectedAdapter != null && selectedAdapter.getImages() != null) {
+      currentlySelected.addAll(selectedAdapter.getImages());
+    }
+    return currentlySelected;
+  }
+
+  private boolean isImageAlreadySelected(Image image, List<Image> currentlySelected) {
+    for (Image selected : currentlySelected) {
+      if (selected.id == image.id) {
+        return true;
       }
     }
-    hasChanges = true;
+    return false;
+  }
 
+  private List<Image> toggleImageInSelection(
+      Image image,
+      List<Image> currentlySelected,
+      boolean wasSelected
+  ) {
+    List<Image> newSelectedList = new ArrayList<>();
+
+    if (wasSelected) {
+      // Remove from selection (add all except the clicked image)
+      for (Image selected : currentlySelected) {
+        if (selected.id != image.id) {
+          newSelectedList.add(selected);
+        }
+      }
+    } else {
+      // Add to selection (add all current selections first, then the new one)
+      newSelectedList.addAll(currentlySelected);
+      newSelectedList.add(image);
+    }
+
+    return newSelectedList;
+  }
+
+  private void updateSelectionAdapter(List<Image> newSelectedList) {
+    List<Image> adapterImages = new ArrayList<>();
+    if (!newSelectedList.isEmpty()) {
+      for (int i = 0; i < newSelectedList.size(); i++) {
+        Image img = newSelectedList.get(i);
+        if (img != null) {
+          adapterImages.add(img);
+        }
+      }
+    }
+
+    // Update the adapter with verified list
+    selectedAdapter.setImages(adapterImages);
+  }
+
+  private void updateUIAfterImageSelection() {
     // Update count immediately for better UX - with parentheses
-    textViewSelectedNumber.setText("(" + selectedImages.size() + ")");
+    textViewSelectedNumber.setText(String.format(
+        Locale.getDefault(),
+        getString(R.string.selected_count_format),
+        selectedImages.size()
+    ));
 
     updateSelectedSectionVisibility();
-    selectedAdapter.setImages(selectedImages);
-    updateUnselectedImages();
   }
 
   private void showImageOptionsDialog(Image image) {
-    // Inflate custom dialog view
-    View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_image_options, null);
+    // Create a proper parent ViewGroup for layout parameters to work correctly
+    FrameLayout parentContainer = new FrameLayout(this);
+    parentContainer.setLayoutParams(new FrameLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+                                                                 ViewGroup.LayoutParams.WRAP_CONTENT
+    ));
 
+    // Inflate the view with proper parent
+    View dialogView = LayoutInflater
+        .from(this)
+        .inflate(R.layout.dialog_image_options, parentContainer, false);
+
+    // Setup dialog components
+    DialogComponents components = setupDialogComponents(dialogView, image);
+
+    // Load image into preview
+    loadImagePreview(image, components.imagePreview);
+
+    // Create and show dialog
+    AlertDialog dialog = createImageOptionsDialog(dialogView);
+
+    // Setup button click listeners
+    setupDialogButtonListeners(dialog, image, components);
+
+    dialog.show();
+  }
+
+  private DialogComponents setupDialogComponents(View dialogView, Image image) {
     // Find views
-    ImageView imagePreview = dialogView.findViewById(R.id.imagePreview);
+    ImageView imagePreview = dialogView.findViewById(R.id.image_preview);
     EditText editImageName = dialogView.findViewById(R.id.editImageName);
     Button btnDeleteImage = dialogView.findViewById(R.id.btnDeleteImage);
     Button btnCancel = dialogView.findViewById(R.id.btnCancel);
@@ -319,13 +370,46 @@ public class ImageSelectionActivity extends AppCompatActivity {
     // Set current image name
     editImageName.setText(image.name);
 
-    // Initial validation in case name is empty
-    if (image.name.trim().isEmpty()) {
-      textInputLayout.setError("Name cannot be empty");
-      textInputLayout.setErrorEnabled(true);
-    }
+    // Initial validation check
+    validateImageName(image.name, textInputLayout);
 
     // Add text change listener to validate input in real-time
+    setupImageNameValidator(editImageName, textInputLayout);
+
+    // Apply checkerboard pattern background for transparency
+    setupCheckerboardBackground(imagePreview);
+
+    // Hide delete button for default images
+    btnDeleteImage.setVisibility(image.source.equals(SOURCE_DEFAULT) ? View.GONE : View.VISIBLE);
+
+    // Use error color from theme for delete button
+    btnDeleteImage.setTextColor(getResources().getColor(R.color.error, getTheme()));
+
+    return new DialogComponents(
+        imagePreview,
+                                editImageName,
+                                btnDeleteImage,
+                                btnCancel,
+                                btnSave,
+                                textInputLayout
+    );
+  }
+
+  private void validateImageName(String name, TextInputLayout textInputLayout) {
+    if (name.trim().isEmpty()) {
+      textInputLayout.setError(ERROR_NAME_EMPTY);
+      textInputLayout.setErrorEnabled(true);
+    }
+  }
+
+  private void setupCheckerboardBackground(ImageView imagePreview) {
+    int lightColor = Color.rgb(238, 238, 238); // #EEEEEE
+    int darkColor = Color.rgb(204, 204, 204);  // #CCCCCC
+    CheckerboardDrawable checkerboardDrawable = new CheckerboardDrawable(lightColor, darkColor, 16);
+    imagePreview.setBackground(checkerboardDrawable);
+  }
+
+  private void setupImageNameValidator(EditText editImageName, TextInputLayout textInputLayout) {
     editImageName.addTextChangedListener(new TextWatcher() {
       @Override
       public void beforeTextChanged(CharSequence s, int start, int count, int after) {
@@ -338,7 +422,7 @@ public class ImageSelectionActivity extends AppCompatActivity {
         String text = s.toString().trim();
         if (text.isEmpty()) {
           // Show error immediately when field becomes empty
-          textInputLayout.setError("Name cannot be empty");
+          textInputLayout.setError(ERROR_NAME_EMPTY);
           textInputLayout.setErrorEnabled(true);
         } else {
           // Clear error when there is valid input
@@ -352,235 +436,300 @@ public class ImageSelectionActivity extends AppCompatActivity {
         // Not used
       }
     });
+  }
 
-    // Apply checkboard pattern background for transparency
-    int lightColor = Color.rgb(238, 238, 238); // #EEEEEE
-    int darkColor = Color.rgb(204, 204, 204);  // #CCCCCC
-    CheckerboardDrawable checkerboardDrawable = new CheckerboardDrawable(lightColor, darkColor, 16);
-    imagePreview.setBackground(checkerboardDrawable);
-
-    // Load image into preview
-    if (image.source.equals("default")) {
-      // First try to find resource by name
-      int resourceId = getResources().getIdentifier(
-          image.name.toLowerCase(),
-          "drawable",
-          getPackageName()
-      );
-
-      // If not found by name, try to use the path which should contain the resource ID
-      if (resourceId == 0 && image.path != null && !image.path.isEmpty()) {
-        try {
-          resourceId = Integer.parseInt(image.path);
-        } catch (NumberFormatException e) {
-          // Path is not a valid resource ID
-          resourceId = 0;
-        }
-      }
-
-      if (resourceId != 0) {
-        // Use a request with centerInside to keep aspect ratio and show checkerboard behind
-        // transparent areas
-        Glide.with(this).load(resourceId).fitCenter() // Fit within bounds keeping aspect ratio
-             .into(imagePreview);
-      } else {
-        Toast.makeText(this, "Failed to load default image", Toast.LENGTH_SHORT).show();
-      }
-    } else {
-      // Load custom image from URI
-      Uri uri = Uri.parse(image.path);
-      try {
-        getContentResolver().takePersistableUriPermission(
-            uri,
-            Intent.FLAG_GRANT_READ_URI_PERMISSION
-        );
-        // Use a request with centerInside to keep aspect ratio and show checkerboard behind
-        // transparent areas
-        Glide.with(this).load(uri).fitCenter() // Fit within bounds keeping aspect ratio
-             .into(imagePreview);
-      } catch (Exception e) {
-        Toast.makeText(this, "Failed to load image: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-      }
-    }
-
-    // Hide delete button for default images
-    btnDeleteImage.setVisibility(image.source.equals("default") ? View.GONE : View.VISIBLE);
-
-    // Use error color from theme for delete button
-    btnDeleteImage.setTextColor(getResources().getColor(R.color.error, getTheme()));
-
-    // Create and show dialog
-    AlertDialog dialog = new AlertDialog.Builder(this)
-        .setTitle("Image Options")
+  private AlertDialog createImageOptionsDialog(View dialogView) {
+    return new AlertDialog.Builder(this)
+        .setTitle(Constants.DIALOG_TITLE_IMAGE_OPTIONS)
         .setView(dialogView)
         .create();
+  }
 
-    // Set up button click listeners
-    btnCancel.setOnClickListener(v -> dialog.dismiss());
+  private void setupDialogButtonListeners(
+      AlertDialog dialog,
+      Image image,
+      DialogComponents components
+  ) {
+    // Cancel button listener
+    components.btnCancel.setOnClickListener(v -> dialog.dismiss());
 
-    btnSave.setOnClickListener(v -> {
-      String newName = editImageName.getText().toString().trim();
-      if (newName.isEmpty()) {
-        // Show error on the TextInputLayout for empty name
-        textInputLayout.setError("Name cannot be empty");
-        textInputLayout.setErrorEnabled(true);
-        return; // Don't proceed
-      }
+    // Save button listener
+    components.btnSave.setOnClickListener(v -> handleSaveButtonClick(dialog, image, components));
 
-      // Check if name is different from original
-      if (!newName.equals(image.name)) {
-        // Only rename if the name has actually changed
-        renameImage(image, newName);
-      }
-      dialog.dismiss();
-    });
-
-    btnDeleteImage.setOnClickListener(v -> {
+    // Delete button listener
+    components.btnDeleteImage.setOnClickListener(v -> {
       dialog.dismiss();
       deleteImage(image);
     });
+  }
 
-    dialog.show();
+  private void handleSaveButtonClick(AlertDialog dialog, Image image, DialogComponents components) {
+    String newName = components.editImageName.getText().toString().trim();
+    if (newName.isEmpty()) {
+      // Show error on the TextInputLayout for empty name
+      components.textInputLayout.setError(ERROR_NAME_EMPTY);
+      components.textInputLayout.setErrorEnabled(true);
+      return; // Don't proceed
+    }
+
+    // Check if name is different from original
+    if (!newName.equals(image.name)) {
+      // Only rename if the name has actually changed
+      renameImage(image, newName);
+    }
+    dialog.dismiss();
+  }
+
+  private void loadImagePreview(Image image, ImageView imagePreview) {
+    if (image.source.equals(SOURCE_DEFAULT)) {
+      loadDefaultImage(image, imagePreview);
+    } else {
+      loadCustomImage(image, imagePreview);
+    }
+  }
+
+  private void loadDefaultImage(Image image, ImageView imagePreview) {
+    // Use ResourceUtils with non-deprecated method
+    int resourceId = ResourceUtils.getDrawableResourceByName(image.name);
+
+    // If not found by name, try to use the path which should contain the resource ID
+    if (resourceId == 0 && !TextUtils.isEmpty(image.path)) {
+      try {
+        resourceId = Integer.parseInt(image.path);
+      } catch (NumberFormatException e) {
+        // Path is not a valid resource ID
+      }
+    }
+
+    if (resourceId != 0) {
+      // Use a request with centerInside to keep aspect ratio and show checkerboard behind
+      // transparent areas
+      Glide.with(this).load(resourceId).fitCenter() // Fit within bounds keeping aspect ratio
+           .into(imagePreview);
+    } else {
+      Toast.makeText(this, Constants.TOAST_FAILED_LOAD_DEFAULT, Toast.LENGTH_SHORT).show();
+    }
+  }
+
+  private void loadCustomImage(Image image, ImageView imagePreview) {
+    // Load custom image from URI
+    Uri uri = Uri.parse(image.path);
+    try {
+      getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+      // Use a request with centerInside to keep aspect ratio and show checkerboard behind
+      // transparent areas
+      Glide.with(this).load(uri).fitCenter() // Fit within bounds keeping aspect ratio
+           .into(imagePreview);
+    } catch (Exception e) {
+      Toast
+          .makeText(this, Constants.TOAST_FAILED_LOAD_IMAGE + e.getMessage(), Toast.LENGTH_SHORT)
+          .show();
+    }
   }
 
   private void loadImages() {
     executor.execute(() -> {
       db.imageDao().deleteInvalidCustomImages();
 
-      List<Image> defaultImages = db.imageDao().getImagesBySource("default");
-      List<Image> customImages = db.imageDao().getImagesBySource("custom");
+      // Load images and apply changes on the UI thread
+      List<Image> fetchedImages = fetchAllImages();
+      processLoadedImages(fetchedImages);
+    });
+  }
 
-      // Store the current selected image IDs and preserve their order
-      List<Integer> currentSelectedIdsInOrder = new ArrayList<>();
-      for (Image image : selectedImages) {
-        currentSelectedIdsInOrder.add(image.id);
-      }
+  private List<Image> fetchAllImages() {
+    // First fetch all images from database
+    List<Image> fetchedImages = new ArrayList<>();
+    fetchedImages.addAll(db.imageDao().getImagesBySource(SOURCE_DEFAULT));
+    fetchedImages.addAll(db.imageDao().getImagesBySource(SOURCE_CUSTOM));
+    return fetchedImages;
+  }
 
-      // Also keep a set for faster lookup
-      Set<Integer> currentSelectedIds = new HashSet<>(currentSelectedIdsInOrder);
+  private void processLoadedImages(List<Image> fetchedImages) {
+    // Update allImages list
+    allImages.clear();
+    allImages.addAll(fetchedImages);
 
-      allImages.clear();
-      allImages.addAll(defaultImages);
-      allImages.addAll(customImages);
+    // Handle selected images
+    processSelectedImages();
 
-      // Map of all images by ID for faster lookup
-      Map<Integer, Image> allImagesById = new HashMap<>();
-      for (Image image : allImages) {
-        allImagesById.put(image.id, image);
-      }
+    // Save initial state for possible restoration if user cancels
+    initialSelectedImages = new ArrayList<>(selectedImages);
 
-      if (selectedImages.isEmpty()) {
-        // No in-memory selection, load from persisted preferences
-        Set<Integer> selectedImageIds = SelectedImagesManager.getSelectedImages(this);
-        List<Image> newlySelectedImages = new ArrayList<>();
+    updateUIAfterLoading();
+  }
+
+  private void processSelectedImages() {
+    // Load selected images from preferences if empty
+    if (selectedImages.isEmpty()) {
+      loadSelectionsFromPreferences();
+    } else {
+      filterSelectedImagesAgainstDatabase();
+    }
+  }
+
+  private void filterSelectedImagesAgainstDatabase() {
+    // Filter out deleted images from selected images
+    List<Image> validSelectedImages = new ArrayList<>();
+
+    for (Image selectedImage : selectedImages) {
+      boolean imageStillExists = isImageInDatabase(selectedImage.id);
+      if (imageStillExists) {
+        // Find and use the fresh copy from database
         for (Image image : allImages) {
-          if (selectedImageIds.contains(image.id)) {
-            newlySelectedImages.add(image);
+          if (image.id == selectedImage.id) {
+            validSelectedImages.add(image);
+            break;
           }
-        }
-
-        // Get the saved order if not in random mode
-        if (!isRandomOrderEnabled() && !newlySelectedImages.isEmpty()) {
-          SharedPreferences prefs = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
-          String json = prefs.getString("image_order", null);
-          if (json != null) {
-            try {
-              Gson gson = new Gson();
-              java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<List<Integer>>() {
-              }.getType();
-              List<Integer> savedOrder = gson.fromJson(json, type);
-
-              if (savedOrder != null && !savedOrder.isEmpty()) {
-                // Sort images according to saved order
-                List<Image> orderedImages = new ArrayList<>();
-                for (Integer id : savedOrder) {
-                  for (Image image : newlySelectedImages) {
-                    if (image.id == id) {
-                      orderedImages.add(image);
-                      break;
-                    }
-                  }
-                }
-
-                // Add any new images that weren't in the saved order
-                for (Image image : newlySelectedImages) {
-                  if (!orderedImages.contains(image)) {
-                    orderedImages.add(image);
-                  }
-                }
-
-                selectedImages.clear();
-                selectedImages.addAll(orderedImages);
-              } else {
-                selectedImages.clear();
-                selectedImages.addAll(newlySelectedImages);
-              }
-            } catch (Exception e) {
-              // If there's an error parsing the JSON, just use the unordered list
-              selectedImages.clear();
-              selectedImages.addAll(newlySelectedImages);
-            }
-          } else {
-            selectedImages.clear();
-            selectedImages.addAll(newlySelectedImages);
-          }
-        } else {
-          selectedImages.clear();
-          selectedImages.addAll(newlySelectedImages);
         }
       } else {
-        // We already have selections in memory, preserve their order but filter out deleted images
-        List<Image> orderedSelectedImages = new ArrayList<>();
-
-        // First keep the existing order by iterating through the original ordered list
-        for (Integer imageId : currentSelectedIdsInOrder) {
-          Image image = allImagesById.get(imageId);
-          if (image != null) {
-            // This image still exists in the database
-            orderedSelectedImages.add(image);
-          }
-        }
-
-        selectedImages.clear();
-        selectedImages.addAll(orderedSelectedImages);
+        // Image was deleted, skip it
+        hasChanges = true;
       }
+    }
 
-      runOnUiThread(() -> {
-        // Update count immediately after loading - with parentheses
-        textViewSelectedNumber.setText("(" + selectedImages.size() + ")");
+    selectedImages.clear();
+    selectedImages.addAll(validSelectedImages);
+  }
 
-        updateUnselectedImages();
-        selectedAdapter.notifyDataSetChanged();
-        updateSelectedSectionVisibility();
-      });
+  private boolean isImageInDatabase(int imageId) {
+    for (Image image : allImages) {
+      if (image.id == imageId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private void updateUIAfterLoading() {
+    runOnUiThread(() -> {
+      // Update count immediately after loading - with parentheses
+      textViewSelectedNumber.setText(String.format(
+          Locale.getDefault(),
+          getString(R.string.selected_count_format),
+          selectedImages.size()
+      ));
+
+      // Make sure to use a new copy of the list for the adapter
+      selectedAdapter.setImages(new ArrayList<>(selectedImages));
+
+      updateUnselectedImages();
+      updateSelectedSectionVisibility();
+      // Initial update of multi-select controls visibility
+      updateMultiSelectControlsVisibility();
     });
+  }
+
+  private void loadSelectionsFromPreferences() {
+    // Load selected image IDs from preferences
+    Set<Integer> selectedImageIds = SelectedImagesManager.getSelectedImages(this);
+
+    // Also load the saved image order
+    List<Integer> savedOrderIds = loadImageOrderFromPreferences();
+
+    if (!savedOrderIds.isEmpty()) {
+      loadImagesInSavedOrder(selectedImageIds, savedOrderIds);
+    } else {
+      loadImagesWithoutOrder(selectedImageIds);
+    }
+
+    // Save initial state for possible restoration if user cancels
+    initialSelectedImages = new ArrayList<>(selectedImages);
+  }
+
+  private void loadImagesInSavedOrder(Set<Integer> selectedImageIds, List<Integer> savedOrderIds) {
+    // First add images in the saved order
+    addImagesFromSavedOrder(selectedImageIds, savedOrderIds);
+
+    // Then add any selected images not in the saved order
+    addRemainingSelectedImages(selectedImageIds, savedOrderIds);
+  }
+
+  private void addImagesFromSavedOrder(Set<Integer> selectedImageIds, List<Integer> savedOrderIds) {
+    for (Integer id : savedOrderIds) {
+      if (selectedImageIds.contains(id)) {
+        addImageWithIdToSelected(id);
+      }
+    }
+  }
+
+  private void addRemainingSelectedImages(
+      Set<Integer> selectedImageIds,
+      List<Integer> savedOrderIds
+  ) {
+    for (Integer id : selectedImageIds) {
+      if (!savedOrderIds.contains(id)) {
+        addImageWithIdToSelected(id);
+      }
+    }
+  }
+
+  private void loadImagesWithoutOrder(Set<Integer> selectedImageIds) {
+    // No saved order, just add all selected images
+    for (Image image : allImages) {
+      if (selectedImageIds.contains(image.id)) {
+        selectedImages.add(image);
+      }
+    }
+  }
+
+  private void addImageWithIdToSelected(int id) {
+    for (Image image : allImages) {
+      if (image.id == id) {
+        selectedImages.add(image);
+        break;
+      }
+    }
+  }
+
+  private List<Integer> loadImageOrderFromPreferences() {
+    List<Integer> result = new ArrayList<>();
+    SharedPreferences prefs = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
+    String json = prefs.getString(PREF_IMAGE_ORDER, null);
+
+    if (json != null) {
+      try {
+        Gson gson = new Gson();
+        java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<List<Integer>>() {
+        }.getType();
+        List<Integer> loadedIds = gson.fromJson(json, type);
+        if (loadedIds != null) {
+          result.addAll(loadedIds);
+        }
+      } catch (Exception e) {
+        // Error parsing JSON, return empty list
+      }
+    }
+
+    return result;
   }
 
   private void showRemoveConfirmationDialog() {
     Set<Image> selectedForRemoval = unselectedAdapter.getMultiSelectedImages();
     if (selectedForRemoval.isEmpty()) {
-      Toast.makeText(this, "No images selected for removal", Toast.LENGTH_SHORT).show();
+      Toast.makeText(this, Constants.TOAST_NO_IMAGES_SELECTED, Toast.LENGTH_SHORT).show();
       return;
     }
 
     boolean hasDefaultImages = selectedForRemoval
         .stream()
-        .anyMatch(image -> image.source.equals("default"));
+        .anyMatch(image -> image.source.equals(SOURCE_DEFAULT));
 
     AlertDialog.Builder builder = new AlertDialog.Builder(this)
-        .setTitle("Remove Images")
-        .setNegativeButton("Cancel", null);
+        .setTitle(Constants.DIALOG_TITLE_REMOVE_IMAGES)
+        .setNegativeButton(Constants.CANCEL_BUTTON, null);
 
     if (hasDefaultImages) {
       builder
-          .setMessage(
-              "Only non-default images can be removed. If you proceed, only custom images will be"
-              + " deleted. Are you sure you want to continue?")
-          .setPositiveButton("Remove Custom Only", (dialog, which) -> removeSelectedImages());
+          .setMessage(Constants.DIALOG_MSG_DEFAULT_IMAGES)
+          .setPositiveButton(
+              Constants.REMOVE_CUSTOM_ONLY_BUTTON,
+              (dialog, which) -> removeSelectedImages()
+          );
     } else {
       builder
-          .setMessage("Are you sure you want to remove the selected images?")
-          .setPositiveButton("Remove", (dialog, which) -> removeSelectedImages());
+          .setMessage(Constants.DIALOG_MSG_REMOVE_IMAGES)
+          .setPositiveButton(Constants.REMOVE_BUTTON, (dialog, which) -> removeSelectedImages());
     }
 
     builder.show();
@@ -590,7 +739,7 @@ public class ImageSelectionActivity extends AppCompatActivity {
     Set<Image> selectedForRemoval = unselectedAdapter.getMultiSelectedImages();
     List<Image> customImagesToRemove = selectedForRemoval
         .stream()
-        .filter(image -> !image.source.equals("default"))
+        .filter(image -> !image.source.equals(SOURCE_DEFAULT))
         .collect(Collectors.toList());
 
     if (!customImagesToRemove.isEmpty()) {
@@ -602,122 +751,281 @@ public class ImageSelectionActivity extends AppCompatActivity {
 
           runOnUiThread(() -> {
             loadImages();
-            Toast.makeText(this, "Selected images deleted", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, Constants.TOAST_IMAGES_DELETED, Toast.LENGTH_SHORT).show();
             exitMultiSelectMode();
           });
         } catch (Exception e) {
           runOnUiThread(() -> Toast
-              .makeText(this, "Failed to delete images: " + e.getMessage(), Toast.LENGTH_LONG)
+              .makeText(this, Constants.TOAST_FAILED_DELETE + e.getMessage(), Toast.LENGTH_LONG)
               .show());
         }
       });
-    } else if (selectedForRemoval.size() > 0) {
+    } else if (!selectedForRemoval.isEmpty()) {
       // Only default images were selected
-      Toast.makeText(this, "Default images cannot be removed", Toast.LENGTH_SHORT).show();
+      Toast.makeText(this, Constants.TOAST_DEFAULT_NOT_REMOVED, Toast.LENGTH_SHORT).show();
       exitMultiSelectMode();
     }
-  }
-
-  private boolean isRandomOrderEnabled() {
-    return getSharedPreferences(PREF_NAME, MODE_PRIVATE).getBoolean(KEY_RANDOM_ORDER, false);
   }
 
   @Override
   public boolean onSupportNavigateUp() {
     if (isMultiSelectMode) {
       exitMultiSelectMode();
-      return true;
-    } else if (hasChanges) {
-      showExitConfirmationDialog();
-      return true;
+      return false;
     }
+
+    if (hasChanges) {
+      showExitConfirmationDialog();
+      return false;
+    }
+
     finish();
     return true;
   }
 
   private void showExitConfirmationDialog() {
     new AlertDialog.Builder(this)
-        .setTitle("Unsaved Changes")
-        .setMessage("You have unsaved changes. What would you like to do?")
-        .setPositiveButton("Save and Exit", (dialog, which) -> saveAndExit())
-        .setNegativeButton("Exit Without Saving", (dialog, which) -> finish())
-        .setNeutralButton("Save", (dialog, which) -> saveSelectedImages())
+        .setTitle(Constants.DIALOG_TITLE_UNSAVED_CHANGES)
+        .setMessage(Constants.DIALOG_MSG_UNSAVED_CHANGES)
+        .setPositiveButton(Constants.SAVE_AND_EXIT_BUTTON, (dialog, which) -> saveAndExit())
+        .setNegativeButton(
+            Constants.EXIT_WITHOUT_SAVING_BUTTON, (dialog, which) -> {
+              // Restore the original state before exiting
+              selectedImages = new ArrayList<>(initialSelectedImages);
+              hasChanges = false;
+              // Important: Don't call any methods that might save to preferences here
+              finish();
+            }
+        )
+        .setNeutralButton(Constants.SAVE_BUTTON, (dialog, which) -> saveSelectedImages())
         .show();
   }
 
   private void saveAndExit() {
-    Set<Integer> selectedImageIds = new HashSet<>();
-    // Also save the order of images for non-random mode
-    List<Integer> orderedImageIds = new ArrayList<>();
+    // Call our method that now correctly syncs and saves
+    saveSelectedImages();
 
-    for (Image image : selectedImages) {
-      selectedImageIds.add(image.id);
-      orderedImageIds.add(image.id);
-    }
-
-    // Save which images are selected
-    SelectedImagesManager.saveSelectedImages(this, selectedImageIds);
-
-    // Save the order of selected images if not in random mode
-    if (!switchRandomOrder.isChecked()) {
-      // Save the order using Gson
-      SharedPreferences prefs = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
-      Gson gson = new Gson();
-      String json = gson.toJson(orderedImageIds);
-      prefs.edit().putString("image_order", json).apply();
-    }
-
-    // Save the random order preference
-    saveRandomOrderPreference(switchRandomOrder.isChecked());
-
+    // Create result intent with selected image IDs
     Intent resultIntent = new Intent();
     resultIntent.putExtra(
         "selected_image_ids",
-        selectedImageIds.stream().mapToInt(Integer::intValue).toArray()
+        selectedImages.stream().mapToInt(image -> image.id).toArray()
     );
-    resultIntent.putExtra("random_order", switchRandomOrder.isChecked());
     setResult(RESULT_OK, resultIntent);
     finish();
   }
 
-  private void saveRandomOrderPreference(boolean isRandom) {
-    getSharedPreferences(PREF_NAME, MODE_PRIVATE)
-        .edit()
-        .putBoolean(KEY_RANDOM_ORDER, isRandom)
-        .apply();
+  private void saveImageOrder() {
+    // Get the current ordered list from the adapter
+    List<Image> currentOrderedImages = selectedAdapter.getImages();
+    if (!currentOrderedImages.isEmpty()) {
+      // Create a completely new list to avoid reference issues
+      selectedImages = new ArrayList<>();
+      selectedImages.addAll(currentOrderedImages);
+    }
+
+    // Mark as changed but DON'T save to preferences
+    hasChanges = true;
   }
 
-  // Add a new method to save selected images without exiting
+  private void addSelectedImagesToSelection() {
+    // Get the IDs of all selected images
+    List<Integer> selectedImageIds = unselectedAdapter.getSelectedImageIds();
+
+    if (selectedImageIds.isEmpty()) {
+      Toast.makeText(this, Constants.TOAST_NO_IMAGES_SELECTED_ADD, Toast.LENGTH_SHORT).show();
+      return;
+    }
+
+    hasChanges = true;
+
+    // Process the selected images
+    List<Image> currentlySelected = getCurrentlySelectedImages();
+    List<Image> imagesToAdd = findImagesToAdd(selectedImageIds, currentlySelected);
+    List<Image> newCombinedList = combineImageLists(currentlySelected, imagesToAdd);
+
+    // Update the adapter and UI
+    updateSelectionWithNewList(newCombinedList);
+    updateUiAfterSelectionChange();
+
+    // Exit multi-select mode
+    exitMultiSelectMode();
+  }
+
+  private List<Image> findImagesToAdd(
+      List<Integer> selectedImageIds,
+      List<Image> currentlySelected
+  ) {
+    List<Image> imagesToAdd = new ArrayList<>();
+
+    for (Image image : allImages) {
+      if (selectedImageIds.contains(image.id) && !isImageAlreadySelected(
+          image,
+          currentlySelected
+      )) {
+        imagesToAdd.add(image);
+      }
+    }
+
+    return imagesToAdd;
+  }
+
+  private List<Image> combineImageLists(List<Image> currentlySelected, List<Image> imagesToAdd) {
+    List<Image> combinedList = new ArrayList<>(currentlySelected);
+    combinedList.addAll(imagesToAdd);
+    return combinedList;
+  }
+
+  private void updateSelectionWithNewList(List<Image> newSelectedList) {
+    // Update the main selection list
+    selectedImages = newSelectedList;
+
+    // Create a verified adapter list
+    List<Image> adapterImages = new ArrayList<>();
+    for (Image img : newSelectedList) {
+      if (img != null) {
+        adapterImages.add(img);
+      }
+    }
+
+    // Update the adapter
+    selectedAdapter.setImages(adapterImages);
+  }
+
+  private void updateUiAfterSelectionChange() {
+    // Update count display
+    textViewSelectedNumber.setText(String.format(
+        Locale.getDefault(),
+        getString(R.string.selected_count_format),
+        selectedImages.size()
+    ));
+
+    // Save the order
+    saveImageOrder();
+
+    // Update the unselected images list
+    updateUnselectedImages();
+
+    // Update UI visibility
+    updateSelectedSectionVisibility();
+  }
+
+  private void updateSelectedSectionVisibility() {
+    boolean hasSelectedImages = !selectedImages.isEmpty();
+
+    textViewSelected.setVisibility(View.VISIBLE);
+    recyclerViewSelected.setVisibility(hasSelectedImages ? View.VISIBLE : View.GONE);
+
+    // Update the selected count text - always in parentheses
+    if (hasSelectedImages) {
+      textViewSelectedNumber.setText(String.format(
+          Locale.getDefault(),
+          getString(R.string.selected_count_format),
+          selectedImages.size()
+      ));
+      textViewSelectedNumber.setVisibility(View.VISIBLE);
+    } else {
+      textViewSelectedNumber.setText(String.format(
+          Locale.getDefault(),
+          getString(R.string.selected_count_format),
+          0
+      ));
+      textViewSelectedNumber.setVisibility(View.VISIBLE);
+    }
+  }
+
+  private void renameImage(Image image, String newName) {
+    executor.execute(() -> {
+      try {
+        image.name = newName;
+        db.imageDao().updateImage(image);
+        runOnUiThread(() -> {
+          loadImages();
+          Toast.makeText(this, Constants.TOAST_IMAGE_RENAMED, Toast.LENGTH_SHORT).show();
+        });
+      } catch (Exception e) {
+        runOnUiThread(() -> Toast
+            .makeText(this, Constants.TOAST_FAILED_RENAME + e.getMessage(), Toast.LENGTH_LONG)
+            .show());
+      }
+    });
+  }
+
+  @Override
+  public boolean onCreateOptionsMenu(Menu menu) {
+    getMenuInflater().inflate(R.menu.menu_image_selection, menu);
+    return true;
+  }
+
+  @Override
+  public boolean onOptionsItemSelected(MenuItem item) {
+    if (item.getItemId() == android.R.id.home && isMultiSelectMode) {
+      exitMultiSelectMode();
+      return true;
+    } else if (item.getItemId() == android.R.id.home) {
+      // Use the dispatcher instead of calling onBackPressed directly
+      getOnBackPressedDispatcher().onBackPressed();
+      return true;
+    } else if (item.getItemId() == R.id.action_done) {
+      if (selectedImages.isEmpty()) {
+        Toast.makeText(this, Constants.TOAST_SELECT_AT_LEAST_ONE, Toast.LENGTH_SHORT).show();
+        return true;
+      }
+      saveSelectedImages();
+      return true;
+    }
+    return super.onOptionsItemSelected(item);
+  }
+
+  @Override
+  public void finish() {
+    // Ensure the original state is maintained if we didn't explicitly save
+    if (hasChanges) {
+      // Restore original state (this won't be seen by the user since we're finishing)
+      selectedImages = initialSelectedImages;
+    }
+    super.finish();
+  }
+
+  // Save selected images without exiting
   private void saveSelectedImages() {
+    // First sync with the adapter's current order
+    List<Image> currentOrderedImages = selectedAdapter.getImages();
+    if (currentOrderedImages != null && !currentOrderedImages.isEmpty()) {
+      selectedImages = new ArrayList<>(currentOrderedImages);
+    }
+
     Set<Integer> selectedImageIds = new HashSet<>();
-    // Also save the order of images for non-random mode
-    List<Integer> orderedImageIds = new ArrayList<>();
 
     for (Image image : selectedImages) {
       selectedImageIds.add(image.id);
-      orderedImageIds.add(image.id);
     }
 
     // Save which images are selected
     SelectedImagesManager.saveSelectedImages(this, selectedImageIds);
 
-    // Save the order of selected images if not in random mode
-    if (!switchRandomOrder.isChecked()) {
-      // Save the order using Gson
-      SharedPreferences prefs = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
-      Gson gson = new Gson();
-      String json = gson.toJson(orderedImageIds);
-      prefs.edit().putString("image_order", json).apply();
-    }
-
-    // Save the random order preference
-    saveRandomOrderPreference(switchRandomOrder.isChecked());
+    // Save the order of selected images using the dedicated method
+    persistImageOrder();
 
     // Reset the changes flag
     hasChanges = false;
 
     // Show confirmation toast
-    Toast.makeText(this, "Selection saved", Toast.LENGTH_SHORT).show();
+    Toast.makeText(this, Constants.TOAST_SELECTION_SAVED, Toast.LENGTH_SHORT).show();
+  }
+
+  // Only called when explicitly saving
+  private void persistImageOrder() {
+    // Save the selected images order to preferences
+    List<Integer> imageIds = new ArrayList<>();
+    for (Image image : selectedImages) {
+      imageIds.add(image.id);
+    }
+
+    SharedPreferences prefs = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
+    Gson gson = new Gson();
+    String json = gson.toJson(imageIds);
+    prefs.edit().putString(PREF_IMAGE_ORDER, json).apply();
   }
 
   private void exitMultiSelectMode() {
@@ -736,172 +1044,111 @@ public class ImageSelectionActivity extends AppCompatActivity {
     }
   }
 
-  private void addSelectedImagesToSelection() {
-    Set<Image> multiSelectedImages = unselectedAdapter.getMultiSelectedImages();
-    if (!multiSelectedImages.isEmpty()) {
-      hasChanges = true;
-      selectedImages.addAll(multiSelectedImages);
-
-      // Update count immediately - with parentheses
-      textViewSelectedNumber.setText("(" + selectedImages.size() + ")");
-
-      // Save the order immediately if we're not in random mode
-      if (!switchRandomOrder.isChecked()) {
-        saveImageOrder();
-      }
-
-      updateUnselectedImages();
-      selectedAdapter.notifyDataSetChanged();
-      updateSelectedSectionVisibility();
-      exitMultiSelectMode();
-    } else {
-      Toast.makeText(this, "No images selected", Toast.LENGTH_SHORT).show();
-    }
-  }
-
-  private void updateSelectedSectionVisibility() {
-    boolean hasSelectedImages = !selectedImages.isEmpty();
-    boolean isRandomOrder = switchRandomOrder.isChecked();
-    int selectedCount = selectedImages.size();
-
-    textViewSelected.setVisibility(View.VISIBLE);
-    recyclerViewSelected.setVisibility(hasSelectedImages ? View.VISIBLE : View.GONE);
-
-    // Ensure the reordering disabled text has the right visibility
-    textViewReorderingDisabled.setVisibility(isRandomOrder ? View.VISIBLE : View.GONE);
-
-    // Update the selected count text - always in parentheses
-    if (hasSelectedImages) {
-      textViewSelectedNumber.setText("(" + selectedCount + ")");
-      textViewSelectedNumber.setVisibility(View.VISIBLE);
-    } else {
-      textViewSelectedNumber.setText("(0)");
-      textViewSelectedNumber.setVisibility(View.VISIBLE);
-    }
-
-    // Update adapter's drag-enabled state based on random order setting
-    selectedAdapter.setDragEnabled(!isRandomOrder);
-
-    // Apply visual indication of random order state
-    if (hasSelectedImages) {
-      if (isRandomOrder) {
-        // Apply disabled appearance when random order is enabled
-        recyclerViewSelected.setAlpha(0.7f); // Slightly transparent
-        textViewSelected.setText("Selected Images");
-      } else {
-        // Normal appearance when manual ordering is enabled
-        recyclerViewSelected.setAlpha(1.0f);
-        textViewSelected.setText("Selected Images");
-
-        // Force a layout pass to ensure visual changes are applied
-        recyclerViewSelected.post(() -> {
-          if (recyclerViewSelected.getAdapter() != null) {
-            recyclerViewSelected.getAdapter().notifyDataSetChanged();
-          }
-        });
-      }
-    } else {
-      textViewSelected.setText("Selected Images");
-    }
-  }
-
-  private void saveImageOrder() {
-    // Only save the order if not in random mode
-    if (!switchRandomOrder.isChecked()) {
-      List<Integer> orderedImageIds = new ArrayList<>();
-      for (Image image : selectedImages) {
-        orderedImageIds.add(image.id);
-      }
-
-      // Save the order using SharedPreferences
-      SharedPreferences prefs = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
-      Gson gson = new Gson();
-      String json = gson.toJson(orderedImageIds);
-      prefs.edit().putString("image_order", json).apply();
-    }
-  }
-
-  private void renameImage(Image image, String newName) {
-    executor.execute(() -> {
-      try {
-        image.name = newName;
-        db.imageDao().updateImage(image);
-        runOnUiThread(() -> {
-          loadImages();
-          Toast.makeText(this, "Image renamed successfully", Toast.LENGTH_SHORT).show();
-        });
-      } catch (Exception e) {
-        runOnUiThread(() -> Toast
-            .makeText(this, "Failed to rename image: " + e.getMessage(), Toast.LENGTH_LONG)
-            .show());
-      }
-    });
-  }
-
-  @Override
-  public boolean onCreateOptionsMenu(Menu menu) {
-    getMenuInflater().inflate(R.menu.menu_image_selection, menu);
-    return true;
-  }
-
-  @Override
-  public boolean onOptionsItemSelected(MenuItem item) {
-    if (item.getItemId() == android.R.id.home && isMultiSelectMode) {
-      exitMultiSelectMode();
-      return true;
-    } else if (item.getItemId() == android.R.id.home) {
-      onBackPressed();
-      return true;
-    } else if (item.getItemId() == R.id.action_done) {
-      if (selectedImages.isEmpty()) {
-        Toast.makeText(this, "Please select at least one image", Toast.LENGTH_SHORT).show();
-        return true;
-      }
-      saveSelectedImages();
-      return true;
-    }
-    return super.onOptionsItemSelected(item);
-  }
-
-  @Override
-  public void onBackPressed() {
-    if (isMultiSelectMode) {
-      exitMultiSelectMode();
-    } else if (hasChanges) {
-      showExitConfirmationDialog();
-    } else {
-      super.onBackPressed();
-    }
-  }
-
   private void openImagePicker() {
+    // Launch the image picker with support for multiple images
     pickImageLauncher.launch("image/*");
+    Toast.makeText(this, Constants.TOAST_MULTI_SELECT_HINT, Toast.LENGTH_SHORT).show();
   }
 
-  private void handleNewImageSelection(Uri imageUri) {
-    String fileName = "Custom_" + System.currentTimeMillis();
-    Image newImage = new Image(fileName, "custom", imageUri.toString());
+  private void handleMultipleImageSelection(List<Uri> imageUris) {
+    // Handle case when user cancels selection or doesn't select any images
+    if (imageUris == null || imageUris.isEmpty()) {
+      return; // Just return silently, no need for toast message on cancellation
+    }
+
+    final int imageCount = imageUris.size();
+    processAndSaveImages(imageUris, imageCount);
+  }
+
+  private void processAndSaveImages(List<Uri> imageUris, final int imageCount) {
+    final List<Image> newImages = new ArrayList<>();
 
     executor.execute(() -> {
       try {
-        long id = db.imageDao().insertImage(newImage);
-        newImage.id = (int) id;
-        runOnUiThread(() -> {
-          allImages.add(newImage);
-          updateUnselectedImages();
-        });
+        // Process each image
+        for (Uri imageUri : imageUris) {
+          processImageUri(imageUri, newImages);
+        }
+
+        // Update UI after all images are processed
+        updateUIAfterImageProcessing(imageCount, newImages);
       } catch (Exception e) {
-        runOnUiThread(() -> Toast
-            .makeText(this, "Failed to save image: " + e.getMessage(), Toast.LENGTH_LONG)
-            .show());
+        showImageSaveError(e);
       }
     });
+  }
+
+  private void processImageUri(Uri imageUri, List<Image> newImages) {
+    String fileName = "Custom_" + System.currentTimeMillis();
+    Image newImage = new Image(fileName, SOURCE_CUSTOM, imageUri.toString());
+
+    // Take persistent read permissions on the URI
+    try {
+      getContentResolver().takePersistableUriPermission(
+          imageUri,
+          Intent.FLAG_GRANT_READ_URI_PERMISSION
+      );
+    } catch (SecurityException e) {
+      // Continue even if we can't get persistent permissions
+    }
+
+    // Insert the image into the database
+    long id = db.imageDao().insertImage(newImage);
+    newImage.id = (int) id;
+    newImages.add(newImage);
+  }
+
+  private void updateUIAfterImageProcessing(int imageCount, List<Image> newImages) {
+    runOnUiThread(() -> {
+      allImages.addAll(newImages);
+      updateUnselectedImages();
+      showImagesAddedToast(imageCount);
+    });
+  }
+
+  private void showImagesAddedToast(int imageCount) {
+    Toast.makeText(
+        this,
+        imageCount > 1
+        ? imageCount + " " + Constants.TOAST_IMAGES_ADDED
+        : Constants.TOAST_IMAGES_ADDED,
+        Toast.LENGTH_SHORT
+    ).show();
   }
 
   private void updateUnselectedImages() {
-    List<Image> unselected = new ArrayList<>(allImages);
-    unselected.removeAll(selectedImages);
+    // Create a completely new list to avoid any reference issues
+    List<Image> unselected = new ArrayList<>();
+
+    // Get the currently selected images directly from the adapter
+    List<Image> currentlySelected = new ArrayList<>();
+    if (selectedAdapter != null && selectedAdapter.getImages() != null) {
+      currentlySelected.addAll(selectedAdapter.getImages());
+    }
+
+    // Add all images that aren't in the selected list
+    for (Image image : allImages) {
+      boolean isSelected = false;
+      for (Image selected : currentlySelected) {
+        if (image.id == selected.id) {
+          isSelected = true;
+          break;
+        }
+      }
+
+      if (!isSelected) {
+        unselected.add(image);
+      }
+    }
+
+    // Update the adapter with the new list
     unselectedAdapter.updateImages(unselected);
+  }
+
+  private void showImageSaveError(Exception e) {
+    runOnUiThread(() -> Toast
+        .makeText(this, Constants.TOAST_FAILED_SAVE_IMAGE + e.getMessage(), Toast.LENGTH_LONG)
+        .show());
   }
 
   private void deleteImage(Image image) {
@@ -910,11 +1157,11 @@ public class ImageSelectionActivity extends AppCompatActivity {
         db.imageDao().deleteImage(image);
         runOnUiThread(() -> {
           loadImages();
-          Toast.makeText(this, "Image deleted successfully", Toast.LENGTH_SHORT).show();
+          Toast.makeText(this, Constants.TOAST_IMAGE_DELETED, Toast.LENGTH_SHORT).show();
         });
       } catch (Exception e) {
         runOnUiThread(() -> Toast
-            .makeText(this, "Failed to delete image: " + e.getMessage(), Toast.LENGTH_LONG)
+            .makeText(this, Constants.TOAST_FAILED_DELETE + e.getMessage(), Toast.LENGTH_LONG)
             .show());
       }
     });
@@ -954,45 +1201,78 @@ public class ImageSelectionActivity extends AppCompatActivity {
     return Math.min(spanCount, 4); // Cap at 4 columns
   }
 
-  /**
-   * ItemDecoration to add spacing between grid items
-   */
-  public static class GridSpacingItemDecoration extends RecyclerView.ItemDecoration {
-    private final int spanCount;
-    private final int spacing;
-    private final boolean includeEdge;
+  // Make the ImageAdapter notify our activity when selections change
+  private void setupUnselectedAdapter() {
+    unselectedAdapter = new ImageAdapter(
+        new ArrayList<>(),
+                                         this::handleImageSelection,
+                                         this::showImageOptionsDialog,
+                                         this::handleImageLongClick
+    );
 
-    public GridSpacingItemDecoration(int spanCount, int spacing, boolean includeEdge) {
-      this.spanCount = spanCount;
+    unselectedAdapter.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
+      @Override
+      public void onChanged() {
+        updateSelectAllCheckboxState();
+      }
+
+      @Override
+      public void onItemRangeChanged(int positionStart, int itemCount) {
+        updateSelectAllCheckboxState();
+      }
+    });
+
+    RecyclerView recyclerViewUnselected = findViewById(R.id.recyclerViewUnselected);
+    recyclerViewUnselected.setAdapter(unselectedAdapter);
+  }
+
+  private static class DialogComponents {
+    final ImageView imagePreview;
+    final EditText editImageName;
+    final Button btnDeleteImage;
+    final Button btnCancel;
+    final Button btnSave;
+    final TextInputLayout textInputLayout;
+
+    DialogComponents(
+        ImageView imagePreview,
+        EditText editImageName,
+        Button btnDeleteImage,
+        Button btnCancel,
+        Button btnSave,
+        TextInputLayout textInputLayout
+    ) {
+      this.imagePreview = imagePreview;
+      this.editImageName = editImageName;
+      this.btnDeleteImage = btnDeleteImage;
+      this.btnCancel = btnCancel;
+      this.btnSave = btnSave;
+      this.textInputLayout = textInputLayout;
+    }
+  }
+
+  /**
+   * A simpler, more stable implementation of grid spacing
+   */
+  public static class StableGridSpacingDecoration extends RecyclerView.ItemDecoration {
+    private final int spacing;
+
+    public StableGridSpacingDecoration(int spacing) {
       this.spacing = spacing;
-      this.includeEdge = includeEdge;
     }
 
     @Override
     public void getItemOffsets(
-        android.graphics.Rect outRect,
-        View view,
-        RecyclerView parent,
-        RecyclerView.State state
+        @NonNull android.graphics.Rect outRect,
+        @NonNull View view,
+        @NonNull RecyclerView parent,
+        @NonNull RecyclerView.State state
     ) {
-      int position = parent.getChildAdapterPosition(view);
-      int column = position % spanCount;
-
-      if (includeEdge) {
-        outRect.left = spacing - column * spacing / spanCount;
-        outRect.right = (column + 1) * spacing / spanCount;
-
-        if (position < spanCount) { // top edge
-          outRect.top = spacing;
-        }
-        outRect.bottom = spacing; // item bottom
-      } else {
-        outRect.left = column * spacing / spanCount;
-        outRect.right = spacing - (column + 1) * spacing / spanCount;
-        if (position >= spanCount) {
-          outRect.top = spacing; // item top
-        }
-      }
+      outRect.left = spacing;
+      outRect.right = spacing;
+      outRect.top = spacing;
+      outRect.bottom = spacing;
     }
   }
 } 
+

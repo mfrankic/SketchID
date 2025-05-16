@@ -25,4 +25,28 @@
     <string name="key_reset_user_progress">reset_user_progress</string>
     <string name="key_export_all_data">export_all_data</string>
     <string name="key_upload_all_data">upload_all_data</string>
+
+    <!-- Image selection activity -->
+    <string name="available_images">Available Images</string>
+    <string name="add">Add</string>
+    <string name="select_all">Select All</string>
+    <string name="remove">Remove</string>
+    <string name="exit_multi_select">Exit multi-select mode</string>
+    <string name="selected_images">Selected Images</string>
+    <string name="selected_count">(0)</string>
+
+    <!-- Dialog strings -->
+    <string name="image_name">Image Name</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="enter_new_name">Enter new name</string>
+    <string name="done">Done</string>
+
+    <!-- Content descriptions -->
+    <string name="image_icon_description">Image icon</string>
+    <string name="options">Options</string>
+    <string name="unselect_image">Unselect image</string>
+    <string name="drag_to_reorder">Drag to reorder</string>
+    <string name="selected_count_format">(%d)</string>
 </resources>

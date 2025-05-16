@@ -6,10 +6,12 @@
     android:padding="16dp">
 
     <EditText
-        android:id="@+id/editText"
+        android:id="@+id/edit_image_name"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="Enter new name"
+        android:layout_marginBottom="16dp"
+        android:hint="@string/enter_new_name"
+        android:importantForAutofill="no"
         android:inputType="text"
         android:maxLines="1" />
 

@@ -29,9 +29,6 @@ public interface ImageDao {
   @Delete
   void deleteImage(Image image);
 
-  @Query("DELETE FROM image WHERE id = :id")
-  void deleteImageById(int id);
-
   @Query("DELETE FROM image WHERE source = 'custom' AND path NOT LIKE 'content://%'")
   void deleteInvalidCustomImages();
 }

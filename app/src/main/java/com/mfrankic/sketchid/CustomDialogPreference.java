@@ -14,25 +14,8 @@ public class CustomDialogPreference extends DialogPreference {
       .getResources()
       .getColor(R.color.onSurface, getContext().getTheme());
 
-  public CustomDialogPreference(Context context) {
-    this(context, null);
-  }
-
   public CustomDialogPreference(Context context, AttributeSet attrs) {
     super(context, attrs, R.attr.dialogPreferenceStyle);
-  }
-
-  public CustomDialogPreference(Context context, AttributeSet attrs, int defStyleAttr) {
-    super(context, attrs, defStyleAttr);
-  }
-
-  public CustomDialogPreference(
-      Context context,
-      AttributeSet attrs,
-      int defStyleAttr,
-      int defStyleRes
-  ) {
-    super(context, attrs, defStyleAttr, defStyleRes);
   }
 
   /**

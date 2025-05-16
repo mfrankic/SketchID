@@ -1,7 +1,6 @@
 package com.mfrankic.sketchid;
 
 import android.content.Context;
-import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
@@ -9,6 +8,7 @@ import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.VectorDrawable;
 import android.widget.ImageButton;
 
+import androidx.annotation.NonNull;
 import androidx.core.content.res.ResourcesCompat;
 
 /**
@@ -18,48 +18,6 @@ public class CheckboxUtils {
 
   private CheckboxUtils() {
     throw new IllegalStateException("Utility class");
-  }
-
-  /**
-   * Applies a semi-transparent white background to a checkbox with app theme colors
-   *
-   * @param context        The application context
-   * @param checkboxButton The ImageButton used as a checkbox
-   * @param isChecked      Whether the checkbox is checked
-   * @param alpha          The alpha value (0.0-1.0) for background transparency
-   */
-  public static void styleCheckboxForImageOverlay(
-      Context context,
-      ImageButton checkboxButton,
-      boolean isChecked,
-      float alpha
-  ) {
-    // Get colors from the theme
-    TypedArray typedArray = context.obtainStyledAttributes(new int[]{
-        R.attr.checkboxBorderColor, R.attr.checkboxCheckmarkColor, R.attr.checkboxBackgroundColor
-    });
-
-    int borderColor = typedArray.getColor(0, Color.BLUE); // Default to blue if not found
-    int checkmarkColor = typedArray.getColor(1, Color.WHITE); // Default to white if not found
-    int backgroundColor = typedArray.getColor(2, Color.TRANSPARENT); // Default to transparent
-
-    typedArray.recycle();
-
-    // If background color is transparent, use a semi-transparent white
-    if (Color.alpha(backgroundColor) == 0) {
-      backgroundColor = Color.BLACK;
-      backgroundColor = applyAlpha(backgroundColor, alpha);
-    }
-
-    // Apply the styling
-    styleCustomCheckbox(
-        context,
-        checkboxButton,
-        isChecked,
-        backgroundColor,
-        borderColor,
-        checkmarkColor
-    );
   }
 
   /**
@@ -110,19 +68,7 @@ public class CheckboxUtils {
   ) {
 
     // Border width in dp
-    float borderWidthDp = 2f;
-    float borderWidth = context.getResources().getDisplayMetrics().density * borderWidthDp;
-
-    // Corner radius in dp
-    float cornerRadiusDp = 2f;
-    float cornerRadius = context.getResources().getDisplayMetrics().density * cornerRadiusDp;
-
-    // Create background with border
-    GradientDrawable background = new GradientDrawable();
-    background.setShape(GradientDrawable.RECTANGLE);
-    background.setColor(backgroundColor);
-    background.setStroke((int) borderWidth, borderColor);
-    background.setCornerRadius(cornerRadius);
+    GradientDrawable background = getGradientDrawable(context, backgroundColor, borderColor);
 
     if (state > 0) {
       // Checked or indeterminate state, get the appropriate drawable
@@ -155,6 +101,28 @@ public class CheckboxUtils {
     }
   }
 
+  @NonNull
+  private static GradientDrawable getGradientDrawable(
+      Context context,
+      int backgroundColor,
+      int borderColor
+  ) {
+    float borderWidthDp = 2f;
+    float borderWidth = context.getResources().getDisplayMetrics().density * borderWidthDp;
+
+    // Corner radius in dp
+    float cornerRadiusDp = 2f;
+    float cornerRadius = context.getResources().getDisplayMetrics().density * cornerRadiusDp;
+
+    // Create background with border
+    GradientDrawable background = new GradientDrawable();
+    background.setShape(GradientDrawable.RECTANGLE);
+    background.setColor(backgroundColor);
+    background.setStroke((int) borderWidth, borderColor);
+    background.setCornerRadius(cornerRadius);
+    return background;
+  }
+
   /**
    * Creates a semi-transparent color with alpha value in 0-1 range
    *
@@ -178,13 +146,4 @@ public class CheckboxUtils {
     return Color.argb(alphaInt, red, green, blue);
   }
 
-  /**
-   * Gets the currently configured checkbox background color from the theme
-   */
-  public static int getCheckboxBackgroundColor(Context context) {
-    TypedArray a = context.obtainStyledAttributes(new int[]{R.attr.checkboxBackgroundColor});
-    int color = a.getColor(0, Color.TRANSPARENT);
-    a.recycle();
-    return color;
-  }
-} 
+}

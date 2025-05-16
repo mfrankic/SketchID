@@ -9,7 +9,6 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.preference.PreferenceManager;
 
@@ -17,7 +16,7 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-public class HomeActivity extends AppCompatActivity {
+public class HomeActivity extends BaseActivity {
 
   long selectedUserID;
   User selectedUser;
@@ -66,10 +65,9 @@ public class HomeActivity extends AppCompatActivity {
             .getString(KEY_DRAWING_ATTEMPTS, "-1");
         if (attempts.equals("-1")) {
           Toast
-              .makeText(
-                  this,
-                  "Please set the number of drawing attempts in settings.",
-                  Toast.LENGTH_LONG
+              .makeText(this,
+                        "Please set the number of drawing attempts in settings.",
+                        Toast.LENGTH_LONG
               )
               .show();
           return;
@@ -79,10 +77,9 @@ public class HomeActivity extends AppCompatActivity {
         Set<Integer> selectedImageIds = SelectedImagesManager.getSelectedImages(this);
         if (selectedImageIds.isEmpty()) {
           Toast
-              .makeText(
-                  this,
-                  "No images selected. Please select images in settings.",
-                  Toast.LENGTH_LONG
+              .makeText(this,
+                        "No images selected. Please select images in settings.",
+                        Toast.LENGTH_LONG
               )
               .show();
         } else {
@@ -97,12 +94,6 @@ public class HomeActivity extends AppCompatActivity {
       Intent intent = new Intent(HomeActivity.this, SettingsActivity.class);
       startActivity(intent);
     });
-  }
-
-  @Override
-  protected void onResume() {
-    super.onResume();
-    refreshCurrentUser();
   }
 
   private void refreshCurrentUser() {
@@ -124,5 +115,11 @@ public class HomeActivity extends AppCompatActivity {
         .getDefaultSharedPreferences(this)
         .getString(KEY_SELECTED_USER, "-1");
     return (savedUserID.equals("-1") || savedUserID.isBlank()) ? -1 : Long.parseLong(savedUserID);
+  }
+
+  @Override
+  protected void onResume() {
+    super.onResume();
+    refreshCurrentUser();
   }
 }

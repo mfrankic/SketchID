@@ -15,14 +15,14 @@
         android:background="@android:color/transparent">
 
         <ImageView
-            android:id="@+id/imagePreview"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:adjustViewBounds="true"
-            android:maxWidth="300dp"
-            android:maxHeight="200dp"
-            android:scaleType="fitCenter" />
+            android:id="@+id/image_preview"
+            android:layout_width="100dp"
+            android:layout_height="100dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp"
+            android:contentDescription="@string/image_icon_description"
+            android:scaleType="centerInside" />
     </FrameLayout>
 
     <!-- Image Name Input -->
@@ -46,7 +46,7 @@
             android:id="@+id/editImageName"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="Image Name"
+            android:hint="@string/image_name"
             android:inputType="text"
             android:maxLength="50"
             android:maxLines="1" />
@@ -67,7 +67,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="8dp"
-            android:text="Delete"
+            android:text="@string/delete"
             android:textColor="@color/error"
             android:tint="@color/error"
             app:strokeColor="@color/error" />
@@ -78,7 +78,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginEnd="8dp"
-            android:text="Cancel"
+            android:text="@string/cancel"
             app:strokeColor="@color/primary" />
 
         <com.google.android.material.button.MaterialButton
@@ -86,6 +86,6 @@
             style="?attr/materialButtonStyle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Save" />
+            android:text="@string/save" />
     </LinearLayout>
 </LinearLayout> 

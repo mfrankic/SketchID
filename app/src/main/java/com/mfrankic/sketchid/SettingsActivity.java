@@ -5,16 +5,17 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.ImageButton;
 
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDelegate;
 import androidx.preference.PreferenceManager;
 
 import java.util.Objects;
 
-public class SettingsActivity extends AppCompatActivity {
+public class SettingsActivity extends BaseActivity {
+
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
+    SettingsFragment settingsFragment;
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_settings);
 
@@ -24,9 +25,10 @@ public class SettingsActivity extends AppCompatActivity {
     }
 
     if (savedInstanceState == null) {
+      settingsFragment = new SettingsFragment();
       getSupportFragmentManager()
           .beginTransaction()
-          .replace(R.id.settings_container, new SettingsFragment())
+          .replace(R.id.settings_container, settingsFragment)
           .commit();
     }
   }
@@ -37,8 +39,9 @@ public class SettingsActivity extends AppCompatActivity {
     MenuItem itemButton = menu.findItem(R.id.action_bar_button);
     itemButton.setActionView(R.layout.action_menu_button);
 
-    ImageButton actionButton = Objects.requireNonNull(itemButton.getActionView()).findViewById(
-        R.id.action_button);
+    ImageButton actionButton = Objects
+        .requireNonNull(itemButton.getActionView())
+        .findViewById(R.id.action_button);
     actionButton.setBackground(null);
 
     int nightMode = AppCompatDelegate.getDefaultNightMode();

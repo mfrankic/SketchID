@@ -1,8 +1,9 @@
 package com.mfrankic.sketchid;
 
-import static com.mfrankic.sketchid.Constants.KEY_CURRENT_ITEM_ATTEMPT;
-import static com.mfrankic.sketchid.Constants.KEY_CURRENT_ITEM_INDEX;
+import static com.mfrankic.sketchid.Constants.FINISHED;
+import static com.mfrankic.sketchid.Constants.IMAGES_VIEWED;
 import static com.mfrankic.sketchid.Constants.KEY_USER_PROGRESS_PREFIX;
+import static com.mfrankic.sketchid.Constants.SETTINGS;
 
 import android.content.Context;
 import android.content.SharedPreferences;
@@ -177,64 +178,6 @@ public class UserProgressManager {
   }
 
   /**
-   * Gets the current session ID for a user
-   */
-  public static String getUserSessionId(Context context, long userId) {
-    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
-    String sessionId = prefs.getString(KEY_USER_SESSION + userId, null);
-
-    // If no session ID exists, generate one
-    if (sessionId == null) {
-      sessionId = generateNewSessionId();
-      prefs.edit().putString(KEY_USER_SESSION + userId, sessionId).apply();
-    }
-
-    return sessionId;
-  }
-
-  /**
-   * Checks if a user has unfinished progress
-   */
-  public static boolean hasUnfinishedProgress(Context context, long userId) {
-    List<Session> unfinishedSessions = getUnfinishedSessions(context, userId);
-    return !unfinishedSessions.isEmpty();
-  }
-
-  /**
-   * Gets unfinished sessions for a user
-   */
-  public static List<Session> getUnfinishedSessions(Context context, long userId) {
-    List<Session> allSessions = getUserSessions(context, userId);
-    List<Session> unfinishedSessions = new ArrayList<>();
-
-    for (Session session : allSessions) {
-      if (!session.isFinished()) {
-        unfinishedSessions.add(session);
-      }
-    }
-
-    return unfinishedSessions;
-  }
-
-  /**
-   * Gets all sessions for a user
-   */
-  public static List<Session> getUserSessions(Context context, long userId) {
-    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
-    Set<String> sessionIds = prefs.getStringSet(KEY_USER_SESSIONS + userId, new HashSet<>());
-    List<Session> sessions = new ArrayList<>();
-
-    for (String sessionId : sessionIds) {
-      Session session = getSession(context, userId, sessionId);
-      if (session != null) {
-        sessions.add(session);
-      }
-    }
-
-    return sessions;
-  }
-
-  /**
    * Gets all users with unfinished sessions
    */
   public static List<UserProgress> getUnfinishedUsers(Context context, AppDatabase db) {
@@ -275,6 +218,40 @@ public class UserProgressManager {
     }
 
     return new ArrayList<>(progressMap.values());
+  }
+
+  /**
+   * Gets unfinished sessions for a user
+   */
+  public static List<Session> getUnfinishedSessions(Context context, long userId) {
+    List<Session> allSessions = getUserSessions(context, userId);
+    List<Session> unfinishedSessions = new ArrayList<>();
+
+    for (Session session : allSessions) {
+      if (!session.isFinished()) {
+        unfinishedSessions.add(session);
+      }
+    }
+
+    return unfinishedSessions;
+  }
+
+  /**
+   * Gets all sessions for a user
+   */
+  public static List<Session> getUserSessions(Context context, long userId) {
+    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
+    Set<String> sessionIds = prefs.getStringSet(KEY_USER_SESSIONS + userId, new HashSet<>());
+    List<Session> sessions = new ArrayList<>();
+
+    for (String sessionId : sessionIds) {
+      Session session = getSession(context, userId, sessionId);
+      if (session != null) {
+        sessions.add(session);
+      }
+    }
+
+    return sessions;
   }
 
   /**
@@ -330,27 +307,12 @@ public class UserProgressManager {
         .apply();
   }
 
-  /**
-   * Resets global progress keys
-   */
-  public static void resetGlobalProgress(Context context) {
-    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
-    prefs.edit().remove(KEY_CURRENT_ITEM_INDEX).remove(KEY_CURRENT_ITEM_ATTEMPT).apply();
-  }
-
   public static class UserProgress {
     private final long userId;
     private final int itemIndex;
     private final int itemAttempt;
     private final String sessionId;
     private String userName;
-
-    public UserProgress(long userId, int itemIndex, int itemAttempt) {
-      this.userId = userId;
-      this.itemIndex = itemIndex;
-      this.itemAttempt = itemAttempt;
-      this.sessionId = null;
-    }
 
     public UserProgress(long userId, int itemIndex, int itemAttempt, String sessionId) {
       this.userId = userId;
@@ -427,17 +389,17 @@ public class UserProgressManager {
       session.setItemAttempt(json.getInt("itemAttempt"));
 
       // Handle optional fields with defaults
-      if (json.has("imagesViewed")) {
-        session.imagesViewed = json.getInt("imagesViewed");
+      if (json.has(IMAGES_VIEWED)) {
+        session.imagesViewed = json.getInt(IMAGES_VIEWED);
       }
 
-      if (json.has("finished")) {
-        session.finished = json.getBoolean("finished");
+      if (json.has(FINISHED)) {
+        session.finished = json.getBoolean(FINISHED);
       }
 
       // Load settings
-      if (json.has("settings")) {
-        JSONObject settingsJson = json.getJSONObject("settings");
+      if (json.has(SETTINGS)) {
+        JSONObject settingsJson = json.getJSONObject(SETTINGS);
         Map<String, Object> settings = new HashMap<>();
 
         // Extract all keys from the settings object
@@ -456,10 +418,6 @@ public class UserProgressManager {
       return sessionId;
     }
 
-    public long getUserId() {
-      return userId;
-    }
-
     public int getItemIndex() {
       return itemIndex;
     }
@@ -476,10 +434,6 @@ public class UserProgressManager {
       this.itemAttempt = itemAttempt;
     }
 
-    public int getImagesViewed() {
-      return imagesViewed;
-    }
-
     public void incrementImagesViewed() {
       this.imagesViewed++;
     }
@@ -492,18 +446,6 @@ public class UserProgressManager {
       this.finished = finished;
     }
 
-    public Map<String, Object> getSettings() {
-      return settings;
-    }
-
-    public void setSetting(String key, Object value) {
-      settings.put(key, value);
-    }
-
-    public Object getSetting(String key) {
-      return settings.get(key);
-    }
-
     public String toJson() {
       JSONObject json = new JSONObject();
       try {
@@ -511,15 +453,15 @@ public class UserProgressManager {
         json.put("userId", userId);
         json.put("itemIndex", itemIndex);
         json.put("itemAttempt", itemAttempt);
-        json.put("imagesViewed", imagesViewed);
-        json.put("finished", finished);
+        json.put(IMAGES_VIEWED, imagesViewed);
+        json.put(FINISHED, finished);
 
         // Convert settings to JSON
         JSONObject settingsJson = new JSONObject();
         for (Map.Entry<String, Object> entry : settings.entrySet()) {
           settingsJson.put(entry.getKey(), entry.getValue());
         }
-        json.put("settings", settingsJson);
+        json.put(SETTINGS, settingsJson);
 
         return json.toString();
       } catch (JSONException e) {
