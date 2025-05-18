@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/cardViewRoot"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="8dp"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="4dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp">
+
+        <ImageView
+            android:id="@+id/image_thumbnail"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:contentDescription="@string/image_icon_description"
+            android:scaleType="centerInside" />
+
+        <TextView
+            android:id="@+id/imageName"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:layout_weight="1"
+            android:textColor="@color/onSurface"
+            android:textSize="16sp" />
+
+        <ImageButton
+            android:id="@+id/btnUnselect"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center_vertical"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/unselect_image"
+            android:src="@android:drawable/ic_menu_close_clear_cancel" />
+
+        <com.mfrankic.sketchid.DraggableImageButton
+            android:id="@+id/dragHandle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center_vertical"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/drag_to_reorder"
+            android:src="@drawable/ic_drag_handle"
+            android:tint="@color/primary" />
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView> 

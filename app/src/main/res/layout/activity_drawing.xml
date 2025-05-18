@@ -7,24 +7,14 @@
 
     <ImageView
         android:id="@+id/reference_image"
+        android:layout_width="match_parent"
+        android:layout_height="150dp"
+        android:layout_marginVertical="16dp"
+        android:contentDescription="@string/reference_image"
         android:src="@drawable/baseline_image_24"
-        android:layout_width="match_parent"
-        android:layout_height="150dp"
-        android:layout_marginVertical="16dp"
         android:visibility="invisible"
-        android:contentDescription="Reference Image"
-        app:layout_constraintTop_toTopOf="@+id/drawing_activity" />
-
-    <TextView
-        android:id="@+id/reference_text"
-        android:layout_width="match_parent"
-        android:layout_height="150dp"
-        android:layout_marginVertical="16dp"
-        android:visibility="invisible"
-        android:gravity="center"
-        android:textSize="30sp"
-        android:text="Reference Image"
-        app:layout_constraintTop_toTopOf="@+id/drawing_activity" />
+        app:layout_constraintTop_toTopOf="@+id/drawing_activity"
+        app:tint="@color/onSurface" />
 
     <TextView
         android:id="@+id/attempt_progress"
@@ -32,20 +22,21 @@
         android:layout_height="wrap_content"
         android:layout_marginVertical="16dp"
         android:gravity="center"
+        android:textColor="@color/onSurface"
         android:textSize="16sp"
-        android:textColor="@android:color/black"
+        app:layout_constraintBottom_toTopOf="@+id/drawing_frame"
         app:layout_constraintTop_toBottomOf="@id/reference_image" />
 
     <FrameLayout
         android:id="@+id/drawing_frame"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:background="@color/surface"
         android:padding="8dp"
-        android:background="@android:color/white"
-        app:layout_constraintTop_toBottomOf="@id/reference_image"
         app:layout_constraintBottom_toTopOf="@id/bottom_buttons"
+        app:layout_constraintEnd_toEndOf="@id/drawing_activity"
         app:layout_constraintStart_toStartOf="@id/drawing_activity"
-        app:layout_constraintEnd_toEndOf="@id/drawing_activity">
+        app:layout_constraintTop_toBottomOf="@id/reference_image">
 
         <com.mfrankic.sketchid.CustomDrawingView
             android:id="@+id/drawing_view"
@@ -58,37 +49,41 @@
         android:id="@+id/bottom_buttons"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:baselineAligned="false"
-        android:orientation="horizontal"
-        android:gravity="center"
         android:layout_marginHorizontal="16dp"
         android:layout_marginVertical="16dp"
+        android:baselineAligned="false"
+        android:gravity="center"
+        android:orientation="horizontal"
         app:layout_constraintBottom_toBottomOf="@+id/drawing_activity">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:gravity="center">
 
             <Button
                 android:id="@+id/btn_clear"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Clear Canvas" />
+                android:backgroundTint="@color/primary"
+                android:text="@string/clear_canvas"
+                android:textColor="@color/onPrimary" />
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center"
-            android:layout_weight="1">
+            android:layout_weight="1"
+            android:gravity="center">
 
             <Button
                 android:id="@+id/btn_next_image"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Next Image" />
+                android:backgroundTint="@color/primary"
+                android:text="@string/next_image"
+                android:textColor="@color/onPrimary" />
         </LinearLayout>
 
     </LinearLayout>

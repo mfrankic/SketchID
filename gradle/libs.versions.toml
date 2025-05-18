@@ -1,18 +1,20 @@
 [versions]
-agp = "8.8.1"
+agp = "8.10.0"
 junit = "4.13.2"
 junitVersion = "1.2.1"
 espressoCore = "3.6.1"
 appcompat = "1.7.0"
 material = "1.12.0"
-activity = "1.8.0"
-constraintlayout = "2.1.4"
-roomCommon = "2.6.1"
-roomRuntime = "2.6.1"
-roomCompiler = "2.6.1"
+activity = "1.10.1"
+constraintlayout = "2.2.1"
+roomCommon = "2.7.1"
+roomRuntime = "2.7.1"
+roomCompiler = "2.7.1"
 googleServices = "4.4.2"
-firebaseBom = "33.9.0"
+firebaseBom = "33.13.0"
 preference = "1.2.1"
+glide = "4.16.0"
+gson = "2.13.0"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -28,6 +30,9 @@ room-compiler = { group = "androidx.room", name = "room-compiler", version.ref =
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-storage = { group = "com.google.firebase", name = "firebase-storage" }
 preference = { group = "androidx.preference", name = "preference", version.ref = "preference" }
+glide = { group = "com.github.bumptech.glide", name = "glide", version.ref = "glide" }
+glide-compiler = { group = "com.github.bumptech.glide", name = "compiler", version.ref = "glide" }
+gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

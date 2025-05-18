@@ -7,5 +7,6 @@
 /captures
 .externalNativeBuild
 .cxx
+.scannerwork
 local.properties
 google-services.json

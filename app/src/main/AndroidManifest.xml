@@ -13,6 +13,7 @@
         android:maxSdkVersion="28" />
 
     <application
+        android:name=".SketchIDApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
@@ -31,7 +32,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".DrawingActivity" />
+        <activity
+            android:name=".ImageSelectionActivity"
+            android:exported="false" />
+        <activity
+            android:name=".DrawingActivity"
+            android:exported="false" />
         <activity android:name=".SettingsActivity" />
 
     </application>

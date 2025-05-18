@@ -9,12 +9,15 @@ import java.util.List;
 @Dao
 public interface UserDao {
 
-    @Insert
-    void insertUser(User user);
+  @Insert
+  long insertUser(User user);
 
-    @Query("SELECT * FROM user WHERE id = :userId LIMIT 1")
-    User getUserById(int userId);
+  @Query("DELETE FROM user WHERE id = :userID;")
+  int deleteUser(long userID);
 
-    @Query("SELECT * FROM user ORDER BY id DESC")
-    List<User> getAllUsers();
+  @Query("SELECT * FROM user WHERE id = :userID LIMIT 1")
+  User getUserByID(long userID);
+
+  @Query("SELECT * FROM user ORDER BY id DESC")
+  List<User> getAllUsers();
 }
