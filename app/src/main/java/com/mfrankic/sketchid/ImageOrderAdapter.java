@@ -1,10 +1,7 @@
 package com.mfrankic.sketchid;
 
-import static com.mfrankic.sketchid.Constants.SOURCE_DEFAULT;
-
 import android.content.Context;
 import android.graphics.Color;
-import android.net.Uri;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,9 +15,6 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
-import com.bumptech.glide.request.RequestOptions;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
@@ -33,6 +27,7 @@ public class ImageOrderAdapter extends RecyclerView.Adapter<ImageOrderAdapter.Im
   private final Context context;
   private final ItemTouchHelper itemTouchHelper;
   private final Map<MaterialCardView, Float> originalElevations = new HashMap<>();
+  private final CheckerboardDrawable checkerboardDrawable; // Cached drawable
   private List<Image> images;
   private OnReorderListener reorderListener;
   private OnImageUnselectListener unselectListener;
@@ -42,6 +37,11 @@ public class ImageOrderAdapter extends RecyclerView.Adapter<ImageOrderAdapter.Im
     this.images = images;  // Use the same list reference
 
     itemTouchHelper = createItemTouchHelper();
+
+    // Initialize the checkerboard drawable once
+    int lightColor = Color.rgb(238, 238, 238); // #EEEEEE
+    int darkColor = Color.rgb(204, 204, 204);  // #CCCCCC
+    checkerboardDrawable = new CheckerboardDrawable(lightColor, darkColor, 8);
   }
 
   /**
@@ -203,32 +203,34 @@ public class ImageOrderAdapter extends RecyclerView.Adapter<ImageOrderAdapter.Im
     }
 
     // Use DiffUtil to calculate the difference and dispatch minimal updates
-    DiffUtil.DiffResult diffResult = DiffUtil.calculateDiff(new DiffUtil.Callback() {
-      @Override
-      public int getOldListSize() {
-        return images.size();
-      }
+    DiffUtil.DiffResult diffResult = DiffUtil.calculateDiff(
+        new DiffUtil.Callback() {
+          @Override
+          public int getOldListSize() {
+            return images.size();
+          }
 
-      @Override
-      public int getNewListSize() {
-        return newImages.size();
-      }
+          @Override
+          public int getNewListSize() {
+            return newImages.size();
+          }
 
-      @Override
-      public boolean areItemsTheSame(int oldPosition, int newPosition) {
-        return images.get(oldPosition).id == newImages.get(newPosition).id;
-      }
+          @Override
+          public boolean areItemsTheSame(int oldPosition, int newPosition) {
+            return images.get(oldPosition).id == newImages.get(newPosition).id;
+          }
 
-      @Override
-      public boolean areContentsTheSame(int oldPosition, int newPosition) {
-        Image oldImage = images.get(oldPosition);
-        Image newImage = newImages.get(newPosition);
-        return oldImage.id == newImage.id
-               && oldImage.name.equals(newImage.name)
-               && oldImage.source.equals(newImage.source)
-               && oldImage.path.equals(newImage.path);
-      }
-    });
+          @Override
+          public boolean areContentsTheSame(int oldPosition, int newPosition) {
+            Image oldImage = images.get(oldPosition);
+            Image newImage = newImages.get(newPosition);
+            return oldImage.id == newImage.id
+                   && oldImage.name.equals(newImage.name)
+                   && oldImage.source.equals(newImage.source)
+                   && oldImage.path.equals(newImage.path);
+          }
+        }, true
+    );
 
     // Update the data - create a completely fresh copy
     this.images = new ArrayList<>();
@@ -274,9 +276,7 @@ public class ImageOrderAdapter extends RecyclerView.Adapter<ImageOrderAdapter.Im
    * Applies a checkerboard pattern background to the image view
    */
   private void applyCheckerboardBackground(ImageViewHolder holder) {
-    int lightColor = Color.rgb(238, 238, 238); // #EEEEEE
-    int darkColor = Color.rgb(204, 204, 204);  // #CCCCCC
-    CheckerboardDrawable checkerboardDrawable = new CheckerboardDrawable(lightColor, darkColor, 8);
+    // Use the cached drawable instead of creating a new one
     holder.imageView.setBackground(checkerboardDrawable);
   }
 
@@ -299,36 +299,8 @@ public class ImageOrderAdapter extends RecyclerView.Adapter<ImageOrderAdapter.Im
    * Loads the appropriate image into the ImageView
    */
   private void loadImage(ImageViewHolder holder, Image image) {
-    if (SOURCE_DEFAULT.equals(image.source)) {
-      loadDefaultImage(holder, image);
-    } else {
-      loadCustomImage(holder, image);
-    }
-  }
-
-  /**
-   * Loads a default image from resources
-   */
-  private void loadDefaultImage(ImageViewHolder holder, Image image) {
-    int imageId = ResourceUtils.getDrawableResourceByName(image.name);
-    if (imageId != 0) {
-      holder.imageView.setImageResource(imageId);
-    } else {
-      holder.imageView.setImageResource(R.drawable.ic_image_placeholder);
-    }
-  }
-
-  /**
-   * Loads a custom image from URI
-   */
-  private void loadCustomImage(ImageViewHolder holder, Image image) {
-    Uri imageUri = Uri.parse(image.path);
-    Glide
-        .with(context)
-        .load(imageUri)
-        .apply(new RequestOptions().centerCrop())
-        .transition(DrawableTransitionOptions.withCrossFade())
-        .into(holder.imageView);
+    // Use the shared ImageLoader utility
+    ImageLoader.load(holder.imageView, null, image, context);
   }
 
   /**

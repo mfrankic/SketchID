@@ -130,13 +130,7 @@ public class ImageSelectionActivity extends BaseActivity {
     btnAddImage.setOnClickListener(v -> openImagePicker());
 
     // Load images from database
-    executor.execute(() -> {
-      db.imageDao().deleteInvalidCustomImages();
-
-      // Load images and apply changes on the UI thread
-      List<Image> fetchedImages = fetchAllImages();
-      processLoadedImages(fetchedImages);
-    });
+    loadImages();
   }
 
   /**

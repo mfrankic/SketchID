@@ -49,4 +49,6 @@
     <string name="unselect_image">Unselect image</string>
     <string name="drag_to_reorder">Drag to reorder</string>
     <string name="selected_count_format">(%d)</string>
+    <string name="error_invalid_resource">Invalid image resource</string>
+    <string name="drag_started">Started dragging item</string>
 </resources>

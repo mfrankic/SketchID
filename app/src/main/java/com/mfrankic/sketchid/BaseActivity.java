@@ -5,8 +5,8 @@ import android.view.View;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 /**
@@ -19,34 +19,14 @@ public class BaseActivity extends AppCompatActivity {
   protected void onCreate(@Nullable Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
 
-    // Ensure proper window inset handling
-    WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-  }
-
-  @Override
-  public void setContentView(int layoutResID) {
-    super.setContentView(layoutResID);
-    setupWindowInsets();
-  }
-
-  @Override
-  public void setContentView(View view) {
-    super.setContentView(view);
-    setupWindowInsets();
-  }
-
-  private void setupWindowInsets() {
-    // Set up insets to ensure content doesn't overlap with system UI
     final View rootView = findViewById(android.R.id.content);
+
     ViewCompat.setOnApplyWindowInsetsListener(
-        rootView, (v, insets) -> {
-          v.setPadding(
-              v.getPaddingLeft(),
-              insets.getInsets(WindowInsetsCompat.Type.systemBars()).top,
-              v.getPaddingRight(),
-              insets.getInsets(WindowInsetsCompat.Type.systemBars()).bottom
-          );
-          return WindowInsetsCompat.CONSUMED;
+        rootView, (v, windowInsets) -> {
+          Insets systemBars = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars());
+          v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
+
+          return windowInsets;
         }
     );
   }

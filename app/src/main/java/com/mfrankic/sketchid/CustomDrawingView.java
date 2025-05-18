@@ -92,6 +92,10 @@ public class CustomDrawingView extends View {
 
   @Override
   public boolean onTouchEvent(MotionEvent event) {
+    if (onStrokeListener == null) {
+      return false;
+    }
+
     handleMotionEventBatchedData(event);
 
     final float touchX = event.getX();

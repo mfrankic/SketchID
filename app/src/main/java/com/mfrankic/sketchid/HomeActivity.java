@@ -106,7 +106,9 @@ public class HomeActivity extends BaseActivity {
 
     executor.execute(() -> {
       selectedUser = db.userDao().getUserByID(selectedUserID);
-      currentUserText.setText(selectedUser != null ? selectedUser.name : "Not selected");
+      runOnUiThread(() -> currentUserText.setText(selectedUser != null
+                                                  ? selectedUser.name
+                                                  : "Not selected"));
     });
   }
 

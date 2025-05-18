@@ -968,10 +968,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         resetUserProgressPreference.setVisible(false);
       }
 
-      resetUserProgressPreference.setTitleColor(getResources().getColor(
-          R.color.error,
-          requireContext().getTheme()
-      ));
+      resetUserProgressPreference.setTitleColor(0xFFB3261E);
 
       // Skip setting dialog properties, we'll show a custom AlertDialog instead
 
@@ -1068,10 +1065,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       // Show reset progress preference and disable certain categories
       if (resetUserProgressPreference != null) {
         resetUserProgressPreference.setVisible(true);
-        resetUserProgressPreference.setTitleColor(getResources().getColor(
-            R.color.error,
-            requireContext().getTheme()
-        ));
+        resetUserProgressPreference.setTitleColor(0xFFB3261E);
       }
 
       if (drawingSettingsCategory != null) {

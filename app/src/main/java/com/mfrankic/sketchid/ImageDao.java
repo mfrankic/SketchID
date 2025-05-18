@@ -29,6 +29,13 @@ public interface ImageDao {
   @Delete
   void deleteImage(Image image);
 
-  @Query("DELETE FROM image WHERE source = 'custom' AND path NOT LIKE 'content://%'")
+  @Query(
+      "DELETE FROM image\n"
+      + "WHERE source = '"
+      + Constants.SOURCE_CUSTOM
+      + "'\n"
+      + "AND path NOT LIKE 'content://%'\n"
+      + "AND path NOT LIKE 'file://%'"
+  )
   void deleteInvalidCustomImages();
 }

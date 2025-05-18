@@ -2,7 +2,6 @@ package com.mfrankic.sketchid;
 
 import static com.mfrankic.sketchid.Constants.ACTION_END;
 import static com.mfrankic.sketchid.Constants.ACTION_START;
-import static com.mfrankic.sketchid.Constants.DEFAULT_ATTEMPTS;
 import static com.mfrankic.sketchid.Constants.DIALOG_MSG_EXIT_DRAWING;
 import static com.mfrankic.sketchid.Constants.DIALOG_TITLE_EXIT_DRAWING;
 import static com.mfrankic.sketchid.Constants.DRAWING_KEY_ANDROID_VERSION;
@@ -17,6 +16,7 @@ import static com.mfrankic.sketchid.Constants.KEY_DRAWING_ATTEMPTS;
 import static com.mfrankic.sketchid.Constants.NO_BUTTON;
 import static com.mfrankic.sketchid.Constants.PREF_IMAGE_ORDER;
 import static com.mfrankic.sketchid.Constants.SOURCE_DEFAULT;
+import static com.mfrankic.sketchid.Constants.TOAST_INVALID_ATTEMPTS_NUMBER;
 import static com.mfrankic.sketchid.Constants.TOAST_INVALID_USER;
 import static com.mfrankic.sketchid.Constants.TOAST_NO_DRAWING;
 import static com.mfrankic.sketchid.Constants.TOAST_NO_IMAGES_SETTINGS;
@@ -522,7 +522,20 @@ public class DrawingActivity extends AppCompatActivity {
     String attempts = PreferenceManager
         .getDefaultSharedPreferences(this)
         .getString(KEY_DRAWING_ATTEMPTS, "-1");
-    return attempts.equals("-1") ? DEFAULT_ATTEMPTS : Integer.parseInt(attempts);
+    int att = -1;
+    try {
+      att = Integer.parseInt(attempts);
+    } catch (NumberFormatException e) {
+      Toast.makeText(this, TOAST_INVALID_ATTEMPTS_NUMBER, Toast.LENGTH_LONG).show();
+      finish();
+    }
+
+    if (att == -1) {
+      Toast.makeText(this, TOAST_INVALID_ATTEMPTS_NUMBER, Toast.LENGTH_LONG).show();
+      finish();
+    }
+
+    return att;
   }
 
   @Override

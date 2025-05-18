@@ -1,11 +1,7 @@
 package com.mfrankic.sketchid;
 
-import static com.mfrankic.sketchid.Constants.SOURCE_DEFAULT;
-
 import android.content.Context;
-import android.content.Intent;
 import android.graphics.Color;
-import android.net.Uri;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -14,28 +10,23 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.recyclerview.widget.DiffUtil;
+import androidx.recyclerview.widget.ListAdapter;
 import androidx.recyclerview.widget.RecyclerView;
 
-import com.bumptech.glide.Glide;
-import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
-import com.bumptech.glide.request.RequestOptions;
 import com.google.android.material.card.MaterialCardView;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-public class ImageAdapter extends RecyclerView.Adapter<ImageAdapter.ImageViewHolder> {
+public class ImageAdapter extends ListAdapter<Image, ImageAdapter.ImageViewHolder> {
   private final OnImageClickListener listener;
   private final OnImageOptionsClickListener optionsListener;
   private final OnImageLongClickListener longClickListener;
-  private final Set<Image> multiSelectedImages = new HashSet<>();
   private final Map<MaterialCardView, Float> originalElevations = new HashMap<>();
-  private List<Image> images;
+  private final SelectionManager<Image> selectionManager;
   private Context context;
   private boolean multiSelectMode = false;
 
@@ -45,75 +36,51 @@ public class ImageAdapter extends RecyclerView.Adapter<ImageAdapter.ImageViewHol
       OnImageOptionsClickListener optionsListener,
       OnImageLongClickListener longClickListener
   ) {
-    this.images = new ArrayList<>(images);
+    super(new ImageDiffCallback());
     this.listener = listener;
     this.optionsListener = optionsListener;
     this.longClickListener = longClickListener;
-  }
 
-  public void updateImages(List<Image> newImages) {
-    // Use DiffUtil to calculate the difference and dispatch minimal updates
-    DiffUtil.DiffResult diffResult = DiffUtil.calculateDiff(new DiffUtil.Callback() {
-      @Override
-      public int getOldListSize() {
-        return images.size();
-      }
-
-      @Override
-      public int getNewListSize() {
-        return newImages.size();
-      }
-
-      @Override
-      public boolean areItemsTheSame(int oldPosition, int newPosition) {
-        return images.get(oldPosition).id == newImages.get(newPosition).id;
-      }
-
-      @Override
-      public boolean areContentsTheSame(int oldPosition, int newPosition) {
-        Image oldImage = images.get(oldPosition);
-        Image newImage = newImages.get(newPosition);
-        return oldImage.id == newImage.id
-               && oldImage.name.equals(newImage.name)
-               && oldImage.source.equals(newImage.source)
-               && oldImage.path.equals(newImage.path);
+    // Initialize selection manager
+    this.selectionManager = new SelectionManager<>(pos -> {
+      if (pos >= 0) {
+        notifyItemChanged(pos);
+      } else {
+        // When we need to update all items, use a more specific range notification
+        int count = getCurrentList().size();
+        if (count > 0) {
+          notifyItemRangeChanged(0, count);
+        }
       }
     });
 
-    // Update the data
-    this.images = new ArrayList<>(newImages);
+    submitList(new ArrayList<>(images));
+  }
 
-    // Dispatch the updates
-    diffResult.dispatchUpdatesTo(this);
+  public void updateImages(List<Image> newImages) {
+    // Validate selections against new list
+    selectionManager.validateSelectionsAgainst(newImages);
+
+    // Update displayed items
+    submitList(new ArrayList<>(newImages));
   }
 
   public void setMultiSelectMode(boolean multiSelectMode) {
     this.multiSelectMode = multiSelectMode;
-    if (!multiSelectMode) {
-      multiSelectedImages.clear();
-    }
-    int itemCount = getItemCount();
-    if (itemCount > 0) {
-      notifyItemRangeChanged(0, itemCount);
-    }
+    selectionManager.setEnabled(multiSelectMode);
   }
 
   public Set<Image> getMultiSelectedImages() {
-    return new HashSet<>(multiSelectedImages);
+    return selectionManager.getSelected();
   }
 
   public void clearSelections() {
-    if (multiSelectedImages.isEmpty()) return;
-
-    multiSelectedImages.clear();
-    for (int i = 0; i < images.size(); i++) {
-      notifyItemChanged(i);
-    }
+    selectionManager.clearSelections();
   }
 
   public Image getImageAt(int position) {
-    if (position >= 0 && position < images.size()) {
-      return images.get(position);
+    if (position >= 0 && position < getItemCount()) {
+      return getItem(position);
     }
     return null;
   }
@@ -128,7 +95,7 @@ public class ImageAdapter extends RecyclerView.Adapter<ImageAdapter.ImageViewHol
 
   @Override
   public void onBindViewHolder(@NonNull ImageViewHolder holder, int position) {
-    Image image = images.get(position);
+    Image image = getItem(position);
     holder.imageName.setText(image.name);
 
     setupImageBackground(holder);
@@ -136,7 +103,9 @@ public class ImageAdapter extends RecyclerView.Adapter<ImageAdapter.ImageViewHol
     resetCardToNormal(holder.itemView);
     setupOptionsButton(holder, image);
     setupClickListeners(holder, image);
-    loadImageIntoView(holder, image);
+
+    // Use ImageLoader utility to load the image
+    ImageLoader.load(holder.imageView, holder.errorText, image, context);
   }
 
   private void resetCardToNormal(View view) {
@@ -180,7 +149,7 @@ public class ImageAdapter extends RecyclerView.Adapter<ImageAdapter.ImageViewHol
 
   private void setupMultiSelectCheckbox(ImageViewHolder holder, Image image) {
     holder.btnOptions.setVisibility(View.VISIBLE);
-    boolean isChecked = multiSelectedImages.contains(image);
+    boolean isChecked = selectionManager.isSelected(image);
 
     int backgroundColor = CheckboxUtils.applyAlpha(Color.BLACK, 0.5f);
     int borderColor = context.getResources().getColor(R.color.primary, context.getTheme());
@@ -199,21 +168,8 @@ public class ImageAdapter extends RecyclerView.Adapter<ImageAdapter.ImageViewHol
   }
 
   public void toggleImageSelection(Image image) {
-    int position = images.indexOf(image);
-    if (position < 0) {
-      return;
-    }
-
-    boolean wasSelected = multiSelectedImages.contains(image);
-
-    if (wasSelected) {
-      multiSelectedImages.remove(image);
-    } else {
-      multiSelectedImages.add(image);
-    }
-
-    // Notify about this specific item changing
-    notifyItemChanged(position);
+    List<Image> currentList = getCurrentList();
+    selectionManager.toggle(image, currentList);
   }
 
   private void setupNormalOptionsButton(ImageViewHolder holder, Image image) {
@@ -236,70 +192,13 @@ public class ImageAdapter extends RecyclerView.Adapter<ImageAdapter.ImageViewHol
     holder.itemView.setOnLongClickListener(v -> longClickListener.onImageLongClick(image));
   }
 
-  private void loadImageIntoView(ImageViewHolder holder, Image image) {
-    if (image.source.equals(SOURCE_DEFAULT)) {
-      loadDefaultImage(holder, image);
-    } else {
-      loadCustomImage(holder, image);
-    }
-  }
-
-  private void loadDefaultImage(ImageViewHolder holder, Image image) {
-    int resourceId = ResourceUtils.getDrawableResourceByName(image.name);
-    if (resourceId != 0) {
-      Glide
-          .with(context)
-          .load(resourceId)
-          .transition(DrawableTransitionOptions.withCrossFade())
-          .apply(RequestOptions.centerCropTransform())
-          .into(holder.imageView);
-    } else {
-      showErrorImage(holder, "Invalid default image");
-    }
-  }
-
-  private void showErrorImage(ImageViewHolder holder, String errorText) {
-    Glide
-        .with(context)
-        .load(android.R.drawable.ic_menu_gallery)
-        .transition(DrawableTransitionOptions.withCrossFade())
-        .apply(RequestOptions.centerCropTransform())
-        .into(holder.imageView);
-    holder.errorText.setText(errorText);
-    holder.errorText.setVisibility(View.VISIBLE);
-  }
-
-  private void loadCustomImage(ImageViewHolder holder, Image image) {
-    Uri uri = Uri.parse(image.path);
-    try {
-      context
-          .getContentResolver()
-          .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-      Glide
-          .with(context)
-          .load(uri)
-          .transition(DrawableTransitionOptions.withCrossFade())
-          .apply(RequestOptions.centerCropTransform())
-          .error(android.R.drawable.ic_menu_gallery)
-          .into(holder.imageView);
-    } catch (SecurityException e) {
-      showErrorImage(holder, "Permission denied");
-    } catch (Exception e) {
-      showErrorImage(holder, "Invalid image");
-    }
-  }
-
-  @Override
-  public int getItemCount() {
-    return images.size();
-  }
-
   /**
    * Get IDs of all selected images
    */
   public List<Integer> getSelectedImageIds() {
     List<Integer> ids = new ArrayList<>();
-    for (Image image : multiSelectedImages) {
+    Set<Image> selectedImages = selectionManager.getSelected();
+    for (Image image : selectedImages) {
       ids.add(image.id);
     }
     return ids;

@@ -13,9 +13,6 @@ public final class Constants {
   public static final String SOURCE_DEFAULT = "default";
   public static final String SOURCE_CUSTOM = "custom";
 
-  // Default values
-  public static final int DEFAULT_ATTEMPTS = 4;
-
   // Common string literals
   public static final String ERROR_NAME_EMPTY = "Name cannot be empty";
   public static final String DRAWING_DATA_PREFIX = "_drawing_data_";
@@ -67,6 +64,7 @@ public final class Constants {
   public static final String TOAST_IMAGE_DELETED = "Image deleted successfully";
   public static final String TOAST_FAILED_SAVE_IMAGE = "Failed to save image: ";
   public static final String TOAST_INVALID_USER = "Invalid user selected. Returning to Home.";
+  public static final String TOAST_INVALID_ATTEMPTS_NUMBER = "Invalid number of drawing attempts";
   public static final String TOAST_NO_DRAWING
       = "Please draw something before moving to the next image.";
   public static final String TOAST_NO_IMAGES_SETTINGS

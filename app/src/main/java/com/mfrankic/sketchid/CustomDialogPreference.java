@@ -10,21 +10,21 @@ import androidx.preference.PreferenceViewHolder;
 
 public class CustomDialogPreference extends DialogPreference {
 
-  private int titleColor = getContext()
-      .getResources()
-      .getColor(R.color.onSurface, getContext().getTheme());
+  private int titleColor;
 
   public CustomDialogPreference(Context context, AttributeSet attrs) {
     super(context, attrs, R.attr.dialogPreferenceStyle);
+    // Initialize with default color value (dark gray for text)
+    titleColor = 0xFF333331; // Direct color value for onSurface
   }
 
   /**
-   * Sets the color of the title text using a color resource ID
+   * Sets the color of the title text using a direct color value
    *
-   * @param colorResId The color resource ID to use for the title
+   * @param colorValue Direct color integer value (not a resource ID)
    */
-  public void setTitleColor(int colorResId) {
-    this.titleColor = colorResId;
+  public void setTitleColor(int colorValue) {
+    this.titleColor = colorValue;
     notifyChanged();
   }
 
@@ -37,11 +37,5 @@ public class CustomDialogPreference extends DialogPreference {
     if (titleView != null && isEnabled()) {
       titleView.setTextColor(titleColor);
     }
-  }
-
-  @Override
-  public boolean persistString(String value) {
-    super.persistString(value);
-    return true;
   }
 }

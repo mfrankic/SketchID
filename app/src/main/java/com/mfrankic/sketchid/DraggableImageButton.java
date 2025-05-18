@@ -2,6 +2,7 @@ package com.mfrankic.sketchid;
 
 import android.content.Context;
 import android.util.AttributeSet;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -72,6 +73,8 @@ public class DraggableImageButton extends AppCompatImageButton {
 
     // If we have a drag listener, notify it that a drag should start
     if (dragStartListener != null) {
+      // Announce drag start for accessibility
+      announceForAccessibility(getResources().getString(R.string.drag_started));
       dragStartListener.onDragStart(this);
       // Consider the event handled
       return true;
@@ -85,21 +88,13 @@ public class DraggableImageButton extends AppCompatImageButton {
    */
   @Override
   public boolean onTouchEvent(MotionEvent event) {
-    if (event.getAction() == MotionEvent.ACTION_DOWN) {
-      performClick();
+    if (dragStartListener == null || event.getAction() != MotionEvent.ACTION_DOWN) {
+      return super.onTouchEvent(event);
     }
 
-    if (event.getAction() == MotionEvent.ACTION_DOWN && dragStartListener != null) {
-      // Provide haptic feedback to indicate drag start
-      performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY);
-      // Notify listener of drag start
-      dragStartListener.onDragStart(this);
-      return true;
-    }
-
-    // Pass to super for normal touch handling
-    return super.onTouchEvent(event);
+    performClick();
+    performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
+    return true;
   }
-
 
 } 
