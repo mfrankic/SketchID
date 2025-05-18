@@ -24,36 +24,11 @@ import java.util.UUID;
 
 public class UserProgressManager {
 
-  private static final String KEY_USER_INDEX = KEY_USER_PROGRESS_PREFIX + "index_";
-  private static final String KEY_USER_ATTEMPT = KEY_USER_PROGRESS_PREFIX + "attempt_";
   private static final String KEY_USER_SESSION = KEY_USER_PROGRESS_PREFIX + "session_";
-  private static final String KEY_FINISHED_USERS = "finished_users";
   private static final String KEY_USER_SESSIONS = KEY_USER_PROGRESS_PREFIX + "sessions_";
 
   private UserProgressManager() {
     // Private constructor to prevent instantiation
-  }
-
-  /**
-   * Saves progress for a specific user
-   */
-  public static void saveUserProgress(
-      Context context,
-      long userId,
-      int itemIndex,
-      int itemAttempt,
-      String sessionId
-  ) {
-    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
-    prefs
-        .edit()
-        .putInt(KEY_USER_INDEX + userId, itemIndex)
-        .putInt(KEY_USER_ATTEMPT + userId, itemAttempt)
-        .putString(KEY_USER_SESSION + userId, sessionId)
-        .apply();
-
-    // Update session data if exists
-    updateSessionProgress(context, userId, sessionId, itemIndex, itemAttempt);
   }
 
   /**
@@ -160,24 +135,6 @@ public class UserProgressManager {
   }
 
   /**
-   * Loads progress for a specific user
-   */
-  public static UserProgress loadUserProgress(Context context, long userId) {
-    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
-    int itemIndex = prefs.getInt(KEY_USER_INDEX + userId, 0);
-    int itemAttempt = prefs.getInt(KEY_USER_ATTEMPT + userId, 1);
-    String sessionId = prefs.getString(KEY_USER_SESSION + userId, null);
-
-    // If no session ID exists, generate one
-    if (sessionId == null) {
-      sessionId = generateNewSessionId();
-      prefs.edit().putString(KEY_USER_SESSION + userId, sessionId).apply();
-    }
-
-    return new UserProgress(userId, itemIndex, itemAttempt, sessionId);
-  }
-
-  /**
    * Gets all users with unfinished sessions
    */
   public static List<UserProgress> getUnfinishedUsers(Context context, AppDatabase db) {
@@ -255,26 +212,6 @@ public class UserProgressManager {
   }
 
   /**
-   * Marks a user as finished
-   */
-  public static void markUserAsFinished(Context context, long userId) {
-    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
-    Set<String> finishedUsers = new HashSet<>(prefs.getStringSet(
-        KEY_FINISHED_USERS,
-        new HashSet<>()
-    ));
-    finishedUsers.add(String.valueOf(userId));
-    prefs.edit().putStringSet(KEY_FINISHED_USERS, finishedUsers).apply();
-
-    // Mark all sessions as finished
-    List<Session> sessions = getUserSessions(context, userId);
-    for (Session session : sessions) {
-      session.setFinished(true);
-      saveSession(context, userId, session);
-    }
-  }
-
-  /**
    * Deletes all sessions for a user
    */
   public static void deleteUserSessions(Context context, long userId) {
@@ -298,13 +235,8 @@ public class UserProgressManager {
       editor.remove(KEY_USER_SESSION + userId + "_" + sessionId);
     }
 
-    // Remove the sessions list and legacy progress data
-    editor
-        .remove(KEY_USER_SESSIONS + userId)
-        .remove(KEY_USER_INDEX + userId)
-        .remove(KEY_USER_ATTEMPT + userId)
-        .remove(KEY_USER_SESSION + userId)
-        .apply();
+    // Remove the sessions list
+    editor.remove(KEY_USER_SESSIONS + userId).apply();
   }
 
   public static class UserProgress {
@@ -312,14 +244,7 @@ public class UserProgressManager {
     private final int itemIndex;
     private final int itemAttempt;
     private final String sessionId;
-    private String userName;
-
-    public UserProgress(long userId, int itemIndex, int itemAttempt, String sessionId) {
-      this.userId = userId;
-      this.itemIndex = itemIndex;
-      this.itemAttempt = itemAttempt;
-      this.sessionId = sessionId;
-    }
+    private final String userName;
 
     public UserProgress(
         long userId,
@@ -349,10 +274,6 @@ public class UserProgressManager {
 
     public String getUserName() {
       return userName;
-    }
-
-    public String getSessionId() {
-      return sessionId;
     }
   }
 

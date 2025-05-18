@@ -8,6 +8,7 @@ import android.graphics.Path;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 
@@ -93,6 +94,10 @@ public class CustomDrawingView extends View {
   @Override
   public boolean onTouchEvent(MotionEvent event) {
     if (onStrokeListener == null) {
+      Log.w(
+          "CustomDrawingView",
+          "onStrokeListener is null; touch events are ignored. Drawing is disabled."
+      );
       return false;
     }
 

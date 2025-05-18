@@ -10,8 +10,6 @@ import static com.mfrankic.sketchid.Constants.DRAWING_KEY_DEVICE_MODEL;
 import static com.mfrankic.sketchid.Constants.DRAWING_KEY_SELECTED_IMAGE_IDS;
 import static com.mfrankic.sketchid.Constants.DRAWING_KEY_TIME_STARTED;
 import static com.mfrankic.sketchid.Constants.FORMAT_PROGRESS_TEXT;
-import static com.mfrankic.sketchid.Constants.KEY_CURRENT_ITEM_ATTEMPT;
-import static com.mfrankic.sketchid.Constants.KEY_CURRENT_ITEM_INDEX;
 import static com.mfrankic.sketchid.Constants.KEY_DRAWING_ATTEMPTS;
 import static com.mfrankic.sketchid.Constants.NO_BUTTON;
 import static com.mfrankic.sketchid.Constants.PREF_IMAGE_ORDER;
@@ -37,7 +35,6 @@ import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.PreferenceManager;
 
 import com.google.gson.Gson;
@@ -53,7 +50,7 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-public class DrawingActivity extends AppCompatActivity {
+public class DrawingActivity extends BaseActivity {
   private final List<Item> items = new ArrayList<>();
   private final List<DrawingData> drawingDataList = new ArrayList<>();
   private FrameLayout drawingLayout;
@@ -125,15 +122,6 @@ public class DrawingActivity extends AppCompatActivity {
       // Load progress from the session
       currentItemIndex = currentSession.getItemIndex();
       currentItemAttempt = currentSession.getItemAttempt();
-    } else {
-      // Fallback to legacy method
-      UserProgressManager.UserProgress progress = UserProgressManager.loadUserProgress(
-          this,
-          selectedUserID
-      );
-      currentItemIndex = progress.getItemIndex();
-      currentItemAttempt = progress.getItemAttempt();
-      sessionId = progress.getSessionId();
     }
   }
 
@@ -162,15 +150,6 @@ public class DrawingActivity extends AppCompatActivity {
           sessionId,
           currentItemIndex,
           currentItemAttempt
-      );
-    } else {
-      // Fallback to legacy method
-      UserProgressManager.saveUserProgress(
-          this,
-          selectedUserID,
-          currentItemIndex,
-          currentItemAttempt,
-          sessionId
       );
     }
   }
@@ -308,12 +287,6 @@ public class DrawingActivity extends AppCompatActivity {
   private void completeDrawingSession() {
     // Mark session as finished
     UserProgressManager.markSessionFinished(this, selectedUserID, sessionId);
-
-    // Legacy: Mark user as finished and clear progress
-    UserProgressManager.markUserAsFinished(this, selectedUserID);
-
-    // Also clear global progress keys for backward compatibility
-    resetGlobalProgress();
 
     // Reset state and navigate to home
     currentItemIndex = 0;
@@ -497,17 +470,6 @@ public class DrawingActivity extends AppCompatActivity {
       referenceImage.setImageURI(android.net.Uri.parse(currentItem.getPath()));
     }
     referenceImage.setVisibility(View.VISIBLE);
-  }
-
-  // Method to reset global progress keys used by legacy code
-  private void resetGlobalProgress() {
-    // For backward compatibility, also clear the global progress keys
-    PreferenceManager
-        .getDefaultSharedPreferences(this)
-        .edit()
-        .remove(KEY_CURRENT_ITEM_INDEX)
-        .remove(KEY_CURRENT_ITEM_ATTEMPT)
-        .apply();
   }
 
   private void saveDrawingToDatabase() {

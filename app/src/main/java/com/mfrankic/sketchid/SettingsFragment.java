@@ -99,11 +99,6 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     drawingSettingsCategory = findPreference(getResources().getText(R.string.key_drawing_settings));
     dataManagementCategory = findPreference(getResources().getText(R.string.key_data_management));
 
-    // Initialize visibility states
-    if (resetUserProgressPreference != null) {
-      resetUserProgressPreference.setVisible(false);
-    }
-
     setupUserListPreference();
     setupNewUserPreference();
     setupDeleteUserPreference();
@@ -269,6 +264,10 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
   private void setupDeleteUserPreference() {
     if (deleteUserPreference != null) {
+      deleteUserPreference.setTitleColor(getResources().getColor(
+          R.color.error,
+          requireContext().getTheme()
+      ));
       // Set up click listener to show a direct AlertDialog
       deleteUserPreference.setOnPreferenceClickListener(preference -> {
         // Only proceed if a user is selected
@@ -655,6 +654,10 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
   private void setupDeleteUserDataPreference() {
     if (deleteUserDataPreference != null) {
+      deleteUserDataPreference.setTitleColor(getResources().getColor(
+          R.color.error,
+          requireContext().getTheme()
+      ));
       // Set up click listener to show a direct AlertDialog
       deleteUserDataPreference.setOnPreferenceClickListener(preference -> {
         // Only proceed if a user is selected
@@ -681,7 +684,8 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     return String.format(
         "Are you sure you want to delete drawing data for "
         + "user: %s?%n%nThis will remove all "
-        + "drawing history but keep the user profile.", userListPreference.getEntry()
+        + "drawing history but keep the user profile.",
+        userListPreference.getEntry()
     );
   }
 
@@ -867,6 +871,10 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
   private void setupClearDataPreference() {
     if (clearDataPreference != null) {
+      clearDataPreference.setTitleColor(getResources().getColor(
+          R.color.error,
+          requireContext().getTheme()
+      ));
       // Set up click listener to show a direct AlertDialog
       clearDataPreference.setOnPreferenceClickListener(preference -> {
         String dialogMessage = "Are you sure you want to delete ALL drawing data for ALL users?%n%n"
@@ -962,15 +970,15 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
   private void setupResetUserProgressPreference() {
     if (resetUserProgressPreference != null) {
+      resetUserProgressPreference.setTitleColor(getResources().getColor(
+          R.color.error,
+          requireContext().getTheme()
+      ));
+
       // Initialize unfinishedUsers list to prevent NPE
-      if (unfinishedUsers == null) {
-        unfinishedUsers = new ArrayList<>();
+      if (unfinishedUsers.isEmpty()) {
         resetUserProgressPreference.setVisible(false);
       }
-
-      resetUserProgressPreference.setTitleColor(0xFFB3261E);
-
-      // Skip setting dialog properties, we'll show a custom AlertDialog instead
 
       resetUserProgressPreference.setOnPreferenceClickListener(preference -> {
         // Show a custom AlertDialog directly
@@ -980,10 +988,10 @@ public class SettingsFragment extends PreferenceFragmentCompat {
             "Resetting progress will delete all unfinished drawing sessions for the listed users,"
             + " allowing them to start fresh.%n%n"
             + "This action will:%n"
-            + "• Delete all in-progress drawing data%n"
-            + "• Reset current attempts to zero%n"
-            + "• Allow users to start drawing again%n%n"
-            + "The following users have unfinished drawing sessions:%n%n%s", userNames
+            + " • Delete all in-progress drawing data%n"
+            + " • Reset current attempts to zero%n"
+            + " • Allow users to start drawing again%n%n"
+            + "The following users have unfinished drawing sessions:%n%s", userNames
         );
 
         // Get and tint the icon
@@ -1033,15 +1041,15 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       int attemptCount = progress.getItemAttempt();
 
       userNamesBuilder
-          .append("• ")
+          .append(" • ")
           .append(progress.getUserName())
           .append(" (Drawing #")
           .append(itemIndex + 1)
           .append(", Attempt: ")
           .append(attemptCount)
-          .append(")%n");
+          .append(")\n");
     }
-    return userNamesBuilder.toString().trim();
+    return userNamesBuilder.toString();
   }
 
   private void resetUserProgress() {
@@ -1065,7 +1073,6 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       // Show reset progress preference and disable certain categories
       if (resetUserProgressPreference != null) {
         resetUserProgressPreference.setVisible(true);
-        resetUserProgressPreference.setTitleColor(0xFFB3261E);
       }
 
       if (drawingSettingsCategory != null) {
@@ -1093,7 +1100,6 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
   private void resetSingleUserProgress(UserProgressManager.UserProgress progress) {
     long userId = progress.getUserId();
-    String sessionId = progress.getSessionId();
 
     // Get all unfinished sessions for this user
     List<UserProgressManager.Session> unfinishedSessions
@@ -1102,11 +1108,6 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     // Mark all sessions as finished
     for (UserProgressManager.Session session : unfinishedSessions) {
       resetSession(userId, session.getSessionId());
-    }
-
-    // For backward compatibility: use the legacy session ID if provided
-    if (sessionId != null) {
-      db.drawingDataDao().deleteUserSessionData(userId, sessionId);
     }
 
     // Clear progress in preferences
