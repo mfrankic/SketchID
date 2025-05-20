@@ -394,7 +394,7 @@ public class ImageSelectionActivity extends BaseActivity {
     editImageName.addTextChangedListener(new TextWatcher() {
       @Override
       public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-        throw new UnsupportedOperationException("Not implemented");
+        // No action needed
       }
 
       @Override

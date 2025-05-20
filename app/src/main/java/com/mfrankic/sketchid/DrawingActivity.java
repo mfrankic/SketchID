@@ -65,6 +65,7 @@ public class DrawingActivity extends BaseActivity {
   private String sessionId;
   private UserProgressManager.Session currentSession;
   private Button nextImageButton;
+  private SensorDataManager sensorDataManager;
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
@@ -80,6 +81,7 @@ public class DrawingActivity extends BaseActivity {
 
     db = AppDatabase.getInstance(this);
     executor = Executors.newSingleThreadExecutor();
+    sensorDataManager = new SensorDataManager(this);
 
     selectedUserID = getIntent().getIntExtra("userID", -1);
 
@@ -243,6 +245,8 @@ public class DrawingActivity extends BaseActivity {
   }
 
   private void finalizeCurrentDrawing() {
+    sensorDataManager.stopCollecting();
+    sensorDataManager.saveData();
 
     DrawingData lastDrawingData = drawingDataList.get(drawingDataList.size() - 1).copy();
     lastDrawingData.action = ACTION_END;
@@ -294,6 +298,7 @@ public class DrawingActivity extends BaseActivity {
     clearButton.setOnClickListener(v -> {
       reInitializeDrawingView();
       drawingDataList.clear();
+      sensorDataManager.clearData();
     });
   }
 
@@ -463,6 +468,8 @@ public class DrawingActivity extends BaseActivity {
 
     if (currentItem.getType() == Item.Type.IMAGE) {
       displayImageItem(currentItem);
+      int imageId = currentItem.getId();
+      sensorDataManager.startCollecting(selectedUserID, imageId, sessionId, currentItemAttempt);
     }
   }
 
@@ -530,6 +537,10 @@ public class DrawingActivity extends BaseActivity {
   @Override
   public void onDestroy() {
     super.onDestroy();
+
+    if (sensorDataManager != null) {
+      sensorDataManager.stopCollecting();
+    }
   }
 
   @Override

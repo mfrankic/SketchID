@@ -836,22 +836,43 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         .drawingDataDao()
         .getAllDrawingDataWithUsersAndImagesByUserID(Long.parseLong(selectedUserID));
 
+    List<GravityExportData> gravityDataList = db
+        .gravityDataDao()
+        .getGravityDataWithUsersAndImagesByUserId(Long.parseLong(selectedUserID));
+
+    List<GyroscopeExportData> gyroscopeDataList = db
+        .gyroscopeDataDao()
+        .getGyroscopeDataWithUsersAndImagesByUserId(Long.parseLong(selectedUserID));
+
+    List<MagneticFieldExportData> magneticFieldDataList = db
+        .magneticFieldDataDao()
+        .getMagneticFieldDataWithUsersAndImagesByUserId(Long.parseLong(selectedUserID));
+
+    List<AccelerometerExportData> accelerometerDataList = db
+        .accelerometerDataDao()
+        .getAccelerometerDataWithUsersAndImagesByUserId(Long.parseLong(selectedUserID));
+
     processDrawingModes(drawingDataList);
+    processGravityDrawingModes(gravityDataList);
+    processGyroscopeDrawingModes(gyroscopeDataList);
+    processMagneticFieldDrawingModes(magneticFieldDataList);
+    processAccelerometerDrawingModes(accelerometerDataList);
 
     Map<String, List<DrawingExportData>> dataByMode = groupDataByDrawingMode(drawingDataList);
+    Map<String, List<GravityExportData>> gravityDataByMode = groupGravityDataByDrawingMode(
+        gravityDataList);
+    Map<String, List<GyroscopeExportData>> gyroscopeDataByMode = groupGyroscopeDataByDrawingMode(
+        gyroscopeDataList);
+    Map<String, List<MagneticFieldExportData>> magneticFieldDataByMode
+        = groupMagneticFieldDataByDrawingMode(magneticFieldDataList);
+    Map<String, List<AccelerometerExportData>> accelerometerDataByMode
+        = groupAccelerometerDataByDrawingMode(accelerometerDataList);
 
     ContentResolver contentResolver = requireActivity().getContentResolver();
     boolean allExported = true;
 
-    File exportDir
-        = new File(
-        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-        Constants.SKETCHID_DATA_DIR
-    );
-    if (!exportDir.exists() && !exportDir.mkdirs()) {
-      requireActivity().runOnUiThread(() -> Toast
-          .makeText(getContext(), Constants.FAILED_EXPORT_MESSAGE, Toast.LENGTH_LONG)
-          .show());
+    File exportDir = createExportDirectory();
+    if (exportDir == null) {
       return false;
     }
 
@@ -919,6 +940,246 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       }
     }
 
+    for (Map.Entry<String, List<GravityExportData>> entry : gravityDataByMode.entrySet()) {
+      String mode = entry.getKey();
+      List<GravityExportData> modeData = entry.getValue();
+
+      if (modeData.isEmpty()) {
+        continue;
+      }
+
+      String timestamp = new SimpleDateFormat(
+          Constants.EXPORT_DATE_FORMAT,
+                                              Locale.getDefault()
+      ).format(new Date());
+
+      String fileName = userListPreference.getEntry()
+                        + Constants.GRAVITY_DATA_PREFIX
+                        + "mode_"
+                        + mode
+                        + "_"
+                        + timestamp
+                        + ".csv";
+
+      File file = new File(exportDir, fileName);
+      Uri exportFileUri = Uri.fromFile(file);
+
+      if (exportFileUri != null) {
+        try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
+          if (outputStream != null) {
+            outputStream.write(Constants.GRAVITY_COLUMN_HEADERS.getBytes());
+            for (GravityExportData data : modeData) {
+              String row = String.format(
+                  Locale.getDefault(),
+                  Constants.GRAVITY_EXPORT_PATTERN,
+                  data.getId(),
+                  data.getUserId(),
+                  data.getUserName(),
+                  data.getImageId(),
+                  data.getImageName(),
+                  data.getAttempt(),
+                  data.getTimestamp(),
+                  data.getX(),
+                  data.getY(),
+                  data.getZ(),
+                  data.getDrawingMode()
+              );
+              outputStream.write(row.getBytes());
+            }
+          }
+        } catch (IOException e) {
+          allExported = false;
+          requireActivity().runOnUiThread(() -> Toast
+              .makeText(
+                  getContext(),
+                  "Failed to export gravity data for mode: " + mode,
+                  Toast.LENGTH_LONG
+              )
+              .show());
+        }
+      }
+    }
+
+    for (Map.Entry<String, List<GyroscopeExportData>> entry : gyroscopeDataByMode.entrySet()) {
+      String mode = entry.getKey();
+      List<GyroscopeExportData> modeData = entry.getValue();
+
+      if (modeData.isEmpty()) {
+        continue;
+      }
+
+      String timestamp = new SimpleDateFormat(
+          Constants.EXPORT_DATE_FORMAT,
+                                              Locale.getDefault()
+      ).format(new Date());
+
+      String fileName = userListPreference.getEntry()
+                        + Constants.GYROSCOPE_DATA_PREFIX
+                        + "mode_"
+                        + mode
+                        + "_"
+                        + timestamp
+                        + ".csv";
+
+      File file = new File(exportDir, fileName);
+      Uri exportFileUri = Uri.fromFile(file);
+
+      if (exportFileUri != null) {
+        try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
+          if (outputStream != null) {
+            outputStream.write(Constants.GYROSCOPE_COLUMN_HEADERS.getBytes());
+            for (GyroscopeExportData data : modeData) {
+              String row = String.format(
+                  Locale.getDefault(),
+                  Constants.GYROSCOPE_EXPORT_PATTERN,
+                  data.getId(),
+                  data.getUserId(),
+                  data.getUserName(),
+                  data.getImageId(),
+                  data.getImageName(),
+                  data.getAttempt(),
+                  data.getTimestamp(),
+                  data.getX(),
+                  data.getY(),
+                  data.getZ(),
+                  data.getDrawingMode()
+              );
+              outputStream.write(row.getBytes());
+            }
+          }
+        } catch (IOException e) {
+          allExported = false;
+          requireActivity().runOnUiThread(() -> Toast
+              .makeText(
+                  getContext(),
+                  "Failed to export gyroscope data for mode: " + mode,
+                  Toast.LENGTH_LONG
+              )
+              .show());
+        }
+      }
+    }
+
+    for (Map.Entry<String, List<MagneticFieldExportData>> entry :
+        magneticFieldDataByMode.entrySet()) {
+      String mode = entry.getKey();
+      List<MagneticFieldExportData> modeData = entry.getValue();
+
+      if (modeData.isEmpty()) {
+        continue;
+      }
+
+      String timestamp = new SimpleDateFormat(
+          Constants.EXPORT_DATE_FORMAT,
+                                              Locale.getDefault()
+      ).format(new Date());
+
+      String fileName = userListPreference.getEntry()
+                        + Constants.MAGNETIC_FIELD_DATA_PREFIX
+                        + "mode_"
+                        + mode
+                        + "_"
+                        + timestamp
+                        + ".csv";
+
+      File file = new File(exportDir, fileName);
+      Uri exportFileUri = Uri.fromFile(file);
+
+      if (exportFileUri != null) {
+        try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
+          if (outputStream != null) {
+            outputStream.write(Constants.MAGNETIC_FIELD_COLUMN_HEADERS.getBytes());
+            for (MagneticFieldExportData data : modeData) {
+              String row = String.format(
+                  Locale.getDefault(),
+                  Constants.MAGNETIC_FIELD_EXPORT_PATTERN,
+                  data.getId(),
+                  data.getUserId(),
+                  data.getUserName(),
+                  data.getImageId(),
+                  data.getImageName(),
+                  data.getAttempt(),
+                  data.getTimestamp(),
+                  data.getX(),
+                  data.getY(),
+                  data.getZ(),
+                  data.getDrawingMode()
+              );
+              outputStream.write(row.getBytes());
+            }
+          }
+        } catch (IOException e) {
+          allExported = false;
+          requireActivity().runOnUiThread(() -> Toast.makeText(
+              getContext(),
+              "Failed to export magnetic field data for mode: "
+              + mode,
+              Toast.LENGTH_LONG
+          ).show());
+        }
+      }
+    }
+
+    for (Map.Entry<String, List<AccelerometerExportData>> entry :
+        accelerometerDataByMode.entrySet()) {
+      String mode = entry.getKey();
+      List<AccelerometerExportData> modeData = entry.getValue();
+
+      if (modeData.isEmpty()) {
+        continue;
+      }
+
+      String timestamp = new SimpleDateFormat(
+          Constants.EXPORT_DATE_FORMAT,
+                                              Locale.getDefault()
+      ).format(new Date());
+
+      String fileName = userListPreference.getEntry()
+                        + Constants.ACCELEROMETER_DATA_PREFIX
+                        + "mode_"
+                        + mode
+                        + "_"
+                        + timestamp
+                        + ".csv";
+
+      File file = new File(exportDir, fileName);
+      Uri exportFileUri = Uri.fromFile(file);
+
+      if (exportFileUri != null) {
+        try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
+          if (outputStream != null) {
+            outputStream.write(Constants.ACCELEROMETER_COLUMN_HEADERS.getBytes());
+            for (AccelerometerExportData data : modeData) {
+              String row = String.format(
+                  Locale.getDefault(),
+                  Constants.ACCELEROMETER_EXPORT_PATTERN,
+                  data.getId(),
+                  data.getUserId(),
+                  data.getUserName(),
+                  data.getImageId(),
+                  data.getImageName(),
+                  data.getAttempt(),
+                  data.getTimestamp(),
+                  data.getX(),
+                  data.getY(),
+                  data.getZ(),
+                  data.getDrawingMode()
+              );
+              outputStream.write(row.getBytes());
+            }
+          }
+        } catch (IOException e) {
+          allExported = false;
+          requireActivity().runOnUiThread(() -> Toast.makeText(
+              getContext(),
+              "Failed to export accelerometer data for mode: "
+              + mode,
+              Toast.LENGTH_LONG
+          ).show());
+        }
+      }
+    }
+
     if (allExported && !silent) {
       requireActivity().runOnUiThread(() -> Toast
           .makeText(getContext(), "Data exported to Downloads/SketchIDData", Toast.LENGTH_LONG)
@@ -956,39 +1217,116 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     }
   }
 
-  private void uploadFileToFirebase(
-      User user,
-      String fileName,
-      Uri uploadFileUri,
-      StorageReference storageRef,
-      AtomicInteger uploadedCount,
-      int totalUsers
-  ) {
-    StorageReference fileRef = storageRef.child("SketchIDData/" + fileName);
-    UploadTask uploadTask = fileRef.putFile(uploadFileUri);
+  /**
+   * Process gravity data to add drawing mode information from session settings
+   */
+  private void processGravityDrawingModes(List<GravityExportData> gravityDataList) {
+    for (GravityExportData data : gravityDataList) {
+      if (data.getSessionId() != null) {
+        UserProgressManager.Session session = UserProgressManager.getSession(
+            requireContext(),
+            data.getUserId(),
+            data.getSessionId()
+        );
 
-    uploadTask.addOnSuccessListener(taskSnapshot -> {
-      uploadedCount.getAndIncrement();
-      if (uploadedCount.get() == totalUsers) {
-        showToast("All data uploaded to Firebase");
+        if (session != null && session.getSettings() != null) {
+          Object modeObj = session.getSettings().get(Constants.DRAWING_KEY_MODE);
+          if (modeObj != null) {
+            data.setDrawingMode(modeObj.toString());
+          } else {
+            data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
+          }
+        } else {
+          data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
+        }
+      } else {
+        data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
       }
-    }).addOnFailureListener(e -> {
-      showToast("Failed to upload data for user: " + user.name);
-      uploadedCount.getAndIncrement();
-    });
+    }
   }
 
-  private File createExportDirectory() {
-    File exportDir
-        = new File(
-        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-        Constants.SKETCHID_DATA_DIR
-    );
-    if (!exportDir.exists() && !exportDir.mkdirs()) {
-      showToast(Constants.FAILED_EXPORT_MESSAGE);
-      return null;
+  /**
+   * Process gyroscope data to add drawing mode information from session settings
+   */
+  private void processGyroscopeDrawingModes(List<GyroscopeExportData> gyroscopeDataList) {
+    for (GyroscopeExportData data : gyroscopeDataList) {
+      if (data.getSessionId() != null) {
+        UserProgressManager.Session session = UserProgressManager.getSession(
+            requireContext(),
+            data.getUserId(),
+            data.getSessionId()
+        );
+
+        if (session != null && session.getSettings() != null) {
+          Object modeObj = session.getSettings().get(Constants.DRAWING_KEY_MODE);
+          if (modeObj != null) {
+            data.setDrawingMode(modeObj.toString());
+          } else {
+            data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
+          }
+        } else {
+          data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
+        }
+      } else {
+        data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
+      }
     }
-    return exportDir;
+  }
+
+  /**
+   * Process magnetic field data to add drawing mode information from session settings
+   */
+  private void processMagneticFieldDrawingModes(List<MagneticFieldExportData> magneticFieldDataList) {
+    for (MagneticFieldExportData data : magneticFieldDataList) {
+      if (data.getSessionId() != null) {
+        UserProgressManager.Session session = UserProgressManager.getSession(
+            requireContext(),
+            data.getUserId(),
+            data.getSessionId()
+        );
+
+        if (session != null && session.getSettings() != null) {
+          Object modeObj = session.getSettings().get(Constants.DRAWING_KEY_MODE);
+          if (modeObj != null) {
+            data.setDrawingMode(modeObj.toString());
+          } else {
+            data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
+          }
+        } else {
+          data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
+        }
+      } else {
+        data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
+      }
+    }
+  }
+
+  /**
+   * Process accelerometer data to add drawing mode information from session settings
+   */
+  private void processAccelerometerDrawingModes(List<AccelerometerExportData> accelerometerDataList) {
+    for (AccelerometerExportData data : accelerometerDataList) {
+      if (data.getSessionId() != null) {
+        UserProgressManager.Session session = UserProgressManager.getSession(
+            requireContext(),
+            data.getUserId(),
+            data.getSessionId()
+        );
+
+        if (session != null && session.getSettings() != null) {
+          Object modeObj = session.getSettings().get(Constants.DRAWING_KEY_MODE);
+          if (modeObj != null) {
+            data.setDrawingMode(modeObj.toString());
+          } else {
+            data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
+          }
+        } else {
+          data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
+        }
+      } else {
+        data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
+      }
+    }
   }
 
   /**
@@ -1003,6 +1341,82 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     dataByMode.put(Constants.DRAWING_MODE_OVERLAY, new ArrayList<>());
 
     for (DrawingExportData data : drawingDataList) {
+      String mode = data.getDrawingMode();
+      dataByMode.computeIfAbsent(mode, k -> new ArrayList<>()).add(data);
+    }
+
+    return dataByMode;
+  }
+
+  /**
+   * Group gravity data by drawing mode
+   */
+  private Map<String, List<GravityExportData>> groupGravityDataByDrawingMode(
+      List<GravityExportData> gravityDataList
+  ) {
+    Map<String, List<GravityExportData>> dataByMode = new HashMap<>();
+
+    dataByMode.put(Constants.DRAWING_MODE_NORMAL, new ArrayList<>());
+    dataByMode.put(Constants.DRAWING_MODE_OVERLAY, new ArrayList<>());
+
+    for (GravityExportData data : gravityDataList) {
+      String mode = data.getDrawingMode();
+      dataByMode.computeIfAbsent(mode, k -> new ArrayList<>()).add(data);
+    }
+
+    return dataByMode;
+  }
+
+  /**
+   * Group gyroscope data by drawing mode
+   */
+  private Map<String, List<GyroscopeExportData>> groupGyroscopeDataByDrawingMode(
+      List<GyroscopeExportData> gyroscopeDataList
+  ) {
+    Map<String, List<GyroscopeExportData>> dataByMode = new HashMap<>();
+
+    dataByMode.put(Constants.DRAWING_MODE_NORMAL, new ArrayList<>());
+    dataByMode.put(Constants.DRAWING_MODE_OVERLAY, new ArrayList<>());
+
+    for (GyroscopeExportData data : gyroscopeDataList) {
+      String mode = data.getDrawingMode();
+      dataByMode.computeIfAbsent(mode, k -> new ArrayList<>()).add(data);
+    }
+
+    return dataByMode;
+  }
+
+  /**
+   * Group magnetic field data by drawing mode
+   */
+  private Map<String, List<MagneticFieldExportData>> groupMagneticFieldDataByDrawingMode(
+      List<MagneticFieldExportData> magneticFieldDataList
+  ) {
+    Map<String, List<MagneticFieldExportData>> dataByMode = new HashMap<>();
+
+    dataByMode.put(Constants.DRAWING_MODE_NORMAL, new ArrayList<>());
+    dataByMode.put(Constants.DRAWING_MODE_OVERLAY, new ArrayList<>());
+
+    for (MagneticFieldExportData data : magneticFieldDataList) {
+      String mode = data.getDrawingMode();
+      dataByMode.computeIfAbsent(mode, k -> new ArrayList<>()).add(data);
+    }
+
+    return dataByMode;
+  }
+
+  /**
+   * Group accelerometer data by drawing mode
+   */
+  private Map<String, List<AccelerometerExportData>> groupAccelerometerDataByDrawingMode(
+      List<AccelerometerExportData> accelerometerDataList
+  ) {
+    Map<String, List<AccelerometerExportData>> dataByMode = new HashMap<>();
+
+    dataByMode.put(Constants.DRAWING_MODE_NORMAL, new ArrayList<>());
+    dataByMode.put(Constants.DRAWING_MODE_OVERLAY, new ArrayList<>());
+
+    for (AccelerometerExportData data : accelerometerDataList) {
       String mode = data.getDrawingMode();
       dataByMode.computeIfAbsent(mode, k -> new ArrayList<>()).add(data);
     }
@@ -1351,6 +1765,41 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     UserProgressManager.markSessionFinished(requireContext(), userId, sessionId);
 
     db.drawingDataDao().deleteUserSessionData(userId, sessionId);
+  }
+
+  private File createExportDirectory() {
+    File exportDir
+        = new File(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+        Constants.SKETCHID_DATA_DIR
+    );
+    if (!exportDir.exists() && !exportDir.mkdirs()) {
+      showToast(Constants.FAILED_EXPORT_MESSAGE);
+      return null;
+    }
+    return exportDir;
+  }
+
+  private void uploadFileToFirebase(
+      User user,
+      String fileName,
+      Uri uploadFileUri,
+      StorageReference storageRef,
+      AtomicInteger uploadedCount,
+      int totalUsers
+  ) {
+    StorageReference fileRef = storageRef.child("SketchIDData/" + fileName);
+    UploadTask uploadTask = fileRef.putFile(uploadFileUri);
+
+    uploadTask.addOnSuccessListener(taskSnapshot -> {
+      uploadedCount.getAndIncrement();
+      if (uploadedCount.get() == totalUsers) {
+        showToast("All data uploaded to Firebase");
+      }
+    }).addOnFailureListener(e -> {
+      showToast("Failed to upload data for user: " + user.name);
+      uploadedCount.getAndIncrement();
+    });
   }
 
   /**
