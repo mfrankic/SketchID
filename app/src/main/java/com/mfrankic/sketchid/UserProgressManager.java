@@ -28,7 +28,7 @@ public class UserProgressManager {
   private static final String KEY_USER_SESSIONS = KEY_USER_PROGRESS_PREFIX + "sessions_";
 
   private UserProgressManager() {
-    // Private constructor to prevent instantiation
+
   }
 
   /**
@@ -55,14 +55,11 @@ public class UserProgressManager {
   private static void saveSession(Context context, long userId, Session session) {
     SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
 
-    // Get existing sessions
     Set<String> sessionsSet = prefs.getStringSet(KEY_USER_SESSIONS + userId, new HashSet<>());
     Set<String> updatedSessions = new HashSet<>(sessionsSet);
 
-    // Add or update this session
     updatedSessions.add(session.getSessionId());
 
-    // Save the session data and update the sessions list
     prefs
         .edit()
         .putString(KEY_USER_SESSION + userId + "_" + session.getSessionId(), session.toJson())
@@ -99,7 +96,6 @@ public class UserProgressManager {
     String sessionId = generateNewSessionId();
     Session session = new Session(sessionId, userId, settings);
 
-    // Save the session
     saveSession(context, userId, session);
 
     return session;
@@ -142,7 +138,6 @@ public class UserProgressManager {
     Map<String, ?> allPrefs = prefs.getAll();
     Map<Long, UserProgress> progressMap = new HashMap<>();
 
-    // Look for user session entries
     for (Map.Entry<String, ?> entry : allPrefs.entrySet()) {
       String key = entry.getKey();
       if (key.startsWith(KEY_USER_SESSIONS)) {
@@ -150,12 +145,11 @@ public class UserProgressManager {
         try {
           long userId = Long.parseLong(userIdStr);
 
-          // Get user's unfinished sessions
           List<Session> unfinishedSessions = getUnfinishedSessions(context, userId);
           if (!unfinishedSessions.isEmpty()) {
             User user = db.userDao().getUserByID(userId);
             if (user != null) {
-              // Use the first unfinished session for backward compatibility
+
               Session firstSession = unfinishedSessions.get(0);
               progressMap.put(
                   userId, new UserProgress(
@@ -168,8 +162,8 @@ public class UserProgressManager {
               );
             }
           }
-        } catch (NumberFormatException e) {
-          // Skip invalid entries
+        } catch (NumberFormatException ignored) {
+          // Ignore invalid user IDs
         }
       }
     }
@@ -224,18 +218,14 @@ public class UserProgressManager {
   public static void clearUserProgress(Context context, long userId) {
     SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(context);
 
-    // Get all sessions for this user
     Set<String> sessionIds = prefs.getStringSet(KEY_USER_SESSIONS + userId, new HashSet<>());
 
-    // Create editor for batch operations
     SharedPreferences.Editor editor = prefs.edit();
 
-    // Remove all session data
     for (String sessionId : sessionIds) {
       editor.remove(KEY_USER_SESSION + userId + "_" + sessionId);
     }
 
-    // Remove the sessions list
     editor.remove(KEY_USER_SESSIONS + userId).apply();
   }
 
@@ -275,6 +265,10 @@ public class UserProgressManager {
     public String getUserName() {
       return userName;
     }
+
+    public String getSessionId() {
+      return sessionId;
+    }
   }
 
   /**
@@ -309,7 +303,6 @@ public class UserProgressManager {
       session.setItemIndex(json.getInt("itemIndex"));
       session.setItemAttempt(json.getInt("itemAttempt"));
 
-      // Handle optional fields with defaults
       if (json.has(IMAGES_VIEWED)) {
         session.imagesViewed = json.getInt(IMAGES_VIEWED);
       }
@@ -318,12 +311,10 @@ public class UserProgressManager {
         session.finished = json.getBoolean(FINISHED);
       }
 
-      // Load settings
       if (json.has(SETTINGS)) {
         JSONObject settingsJson = json.getJSONObject(SETTINGS);
         Map<String, Object> settings = new HashMap<>();
 
-        // Extract all keys from the settings object
         for (Iterator<String> it = settingsJson.keys(); it.hasNext(); ) {
           String key = it.next();
           settings.put(key, settingsJson.get(key));
@@ -367,6 +358,10 @@ public class UserProgressManager {
       this.finished = finished;
     }
 
+    public Map<String, Object> getSettings() {
+      return settings;
+    }
+
     public String toJson() {
       JSONObject json = new JSONObject();
       try {
@@ -377,7 +372,6 @@ public class UserProgressManager {
         json.put(IMAGES_VIEWED, imagesViewed);
         json.put(FINISHED, finished);
 
-        // Convert settings to JSON
         JSONObject settingsJson = new JSONObject();
         for (Map.Entry<String, Object> entry : settings.entrySet()) {
           settingsJson.put(entry.getKey(), entry.getValue());

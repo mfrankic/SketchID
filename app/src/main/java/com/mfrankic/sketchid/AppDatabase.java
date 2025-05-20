@@ -11,7 +11,7 @@ import androidx.room.RoomDatabase;
  * Uses a singleton pattern to ensure a single database instance across the app.
  */
 @Database(
-    entities = {DrawingData.class, User.class, Image.class}, version = 14, exportSchema = false
+    entities = {DrawingData.class, User.class, Image.class}, version = 15, exportSchema = false
 )
 public abstract class AppDatabase extends RoomDatabase {
   private static AppDatabase instance;
@@ -26,7 +26,6 @@ public abstract class AppDatabase extends RoomDatabase {
           .fallbackToDestructiveMigration()
           .build();
 
-      // Initialize with default data
       new Thread(() -> {
         if (instance.imageDao().getAllImages().isEmpty()) {
           instance.imageDao().insertAll(InitialData.getImages());

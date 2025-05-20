@@ -28,10 +28,16 @@ public class DrawingData {
   public int attempt;
   @ColumnInfo(name = "session_id")
   public String sessionID;
+  @ColumnInfo(name = "size")
+  public float size;
+  @ColumnInfo(name = "pressure")
+  public float pressure;
+  @ColumnInfo(name = "orientation")
+  public float orientation;
 
   @SuppressWarnings("unused")
   public DrawingData() {
-    // Default constructor for Room
+
   }
 
   @Ignore
@@ -45,6 +51,9 @@ public class DrawingData {
     this.itemType = builder.itemType;
     this.attempt = builder.attempt;
     this.sessionID = builder.sessionID;
+    this.size = builder.size;
+    this.pressure = builder.pressure;
+    this.orientation = builder.orientation;
   }
 
   public DrawingData copy() {
@@ -58,10 +67,12 @@ public class DrawingData {
         .itemType(itemType)
         .attempt(attempt)
         .sessionID(sessionID)
+        .size(size)
+        .pressure(pressure)
+        .orientation(orientation)
         .build();
   }
 
-  // Builder pattern implementation
   public static class Builder {
     private long time;
     private float x;
@@ -72,6 +83,9 @@ public class DrawingData {
     private Item.Type itemType;
     private int attempt;
     private String sessionID;
+    private float size;
+    private float pressure;
+    private float orientation;
 
     public Builder time(long time) {
       this.time = time;
@@ -115,6 +129,21 @@ public class DrawingData {
 
     public Builder sessionID(String sessionID) {
       this.sessionID = sessionID;
+      return this;
+    }
+
+    public Builder size(float size) {
+      this.size = size;
+      return this;
+    }
+
+    public Builder pressure(float pressure) {
+      this.pressure = pressure;
+      return this;
+    }
+
+    public Builder orientation(float orientation) {
+      this.orientation = orientation;
       return this;
     }
 

@@ -7,13 +7,13 @@ import static com.mfrankic.sketchid.Constants.DIALOG_TITLE_EXIT_DRAWING;
 import static com.mfrankic.sketchid.Constants.DRAWING_KEY_ANDROID_VERSION;
 import static com.mfrankic.sketchid.Constants.DRAWING_KEY_ATTEMPTS;
 import static com.mfrankic.sketchid.Constants.DRAWING_KEY_DEVICE_MODEL;
+import static com.mfrankic.sketchid.Constants.DRAWING_KEY_MODE;
 import static com.mfrankic.sketchid.Constants.DRAWING_KEY_SELECTED_IMAGE_IDS;
 import static com.mfrankic.sketchid.Constants.DRAWING_KEY_TIME_STARTED;
 import static com.mfrankic.sketchid.Constants.FORMAT_PROGRESS_TEXT;
 import static com.mfrankic.sketchid.Constants.KEY_DRAWING_ATTEMPTS;
 import static com.mfrankic.sketchid.Constants.NO_BUTTON;
 import static com.mfrankic.sketchid.Constants.PREF_IMAGE_ORDER;
-import static com.mfrankic.sketchid.Constants.SOURCE_DEFAULT;
 import static com.mfrankic.sketchid.Constants.TOAST_INVALID_ATTEMPTS_NUMBER;
 import static com.mfrankic.sketchid.Constants.TOAST_INVALID_USER;
 import static com.mfrankic.sketchid.Constants.TOAST_NO_DRAWING;
@@ -56,11 +56,9 @@ public class DrawingActivity extends BaseActivity {
   private FrameLayout drawingLayout;
   private CustomDrawingView drawingView;
   private ViewGroup.MarginLayoutParams drawingViewParams;
-  private ImageView referenceImage;
   private int currentItemIndex = 0;
   private int currentItemAttempt = 1;
   private int selectedUserID;
-  private Long startTimestamp;
   private AppDatabase db;
   private Executor executor;
   private int itemAttempts;
@@ -85,7 +83,6 @@ public class DrawingActivity extends BaseActivity {
 
     selectedUserID = getIntent().getIntExtra("userID", -1);
 
-    // Get the drawing attempts from preferences
     itemAttempts = getDrawingAttemptsFromPreferences();
 
     executor.execute(() -> {
@@ -97,7 +94,6 @@ public class DrawingActivity extends BaseActivity {
         return;
       }
 
-      // Get or create a new drawing session for the user
       initializeSession();
 
       runOnUiThread(this::initializeDrawingActivity);
@@ -119,7 +115,7 @@ public class DrawingActivity extends BaseActivity {
 
   private void loadProgress() {
     if (currentSession != null) {
-      // Load progress from the session
+
       currentItemIndex = currentSession.getItemIndex();
       currentItemAttempt = currentSession.getItemAttempt();
     }
@@ -143,7 +139,7 @@ public class DrawingActivity extends BaseActivity {
 
   private void saveProgress() {
     if (currentSession != null) {
-      // Update session progress
+
       UserProgressManager.updateSessionProgress(
           this,
           selectedUserID,
@@ -175,15 +171,15 @@ public class DrawingActivity extends BaseActivity {
   }
 
   private void initializeSession() {
-    // Check for existing sessions
+
     List<UserProgressManager.Session> unfinishedSessions
         = UserProgressManager.getUnfinishedSessions(this, selectedUserID);
 
     if (!unfinishedSessions.isEmpty()) {
-      // Use the first unfinished session
+
       currentSession = unfinishedSessions.get(0);
     } else {
-      // Create a new session with drawing settings
+
       currentSession = UserProgressManager.createDrawingSession(
           this,
           selectedUserID,
@@ -196,15 +192,16 @@ public class DrawingActivity extends BaseActivity {
   private Map<String, Object> collectDrawingSettings() {
     Map<String, Object> settings = new HashMap<>();
 
-    // Save important drawing settings to the session
     settings.put(DRAWING_KEY_ATTEMPTS, itemAttempts);
     settings.put(DRAWING_KEY_TIME_STARTED, System.currentTimeMillis());
 
-    // Add any other relevant settings
+    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+    String drawingMode = prefs.getString(Constants.KEY_DRAWING_MODE, Constants.DRAWING_MODE_NORMAL);
+    settings.put(DRAWING_KEY_MODE, drawingMode);
+
     Set<Integer> selectedImageIds = SelectedImagesManager.getSelectedImages(this);
     settings.put(DRAWING_KEY_SELECTED_IMAGE_IDS, new ArrayList<>(selectedImageIds));
 
-    // Add device info
     settings.put(DRAWING_KEY_DEVICE_MODEL, Build.MODEL);
     settings.put(DRAWING_KEY_ANDROID_VERSION, Build.VERSION.RELEASE);
 
@@ -222,7 +219,6 @@ public class DrawingActivity extends BaseActivity {
     drawingLayout = findViewById(R.id.drawing_frame);
     drawingView = findViewById(R.id.drawing_view);
     drawingViewParams = (ViewGroup.MarginLayoutParams) drawingView.getLayoutParams();
-    referenceImage = findViewById(R.id.reference_image);
     nextImageButton = findViewById(R.id.btn_next_image);
   }
 
@@ -247,18 +243,17 @@ public class DrawingActivity extends BaseActivity {
   }
 
   private void finalizeCurrentDrawing() {
-    // Add END action to the drawing data
+
     DrawingData lastDrawingData = drawingDataList.get(drawingDataList.size() - 1).copy();
     lastDrawingData.action = ACTION_END;
     drawingDataList.add(lastDrawingData);
 
-    // Save data and record progress
     saveDrawingToDatabase();
     UserProgressManager.recordNextImage(this, selectedUserID, sessionId);
   }
 
   private void updateDrawingProgress() {
-    // Update attempt counters
+
     currentItemAttempt++;
 
     if (currentItemAttempt > itemAttempts) {
@@ -266,7 +261,6 @@ public class DrawingActivity extends BaseActivity {
       currentItemIndex++;
     }
 
-    // Update UI for last item
     if (currentItemIndex == (items.size() - 1) && currentItemAttempt == itemAttempts) {
       nextImageButton.setText(R.string.finish);
     }
@@ -274,21 +268,20 @@ public class DrawingActivity extends BaseActivity {
 
   private void proceedToNextDrawing() {
     if (currentItemIndex < items.size()) {
-      // Continue with next image
+
       loadCurrentItem();
       reInitializeDrawingView();
       updateProgressText();
     } else {
-      // Complete the drawing session
+
       completeDrawingSession();
     }
   }
 
   private void completeDrawingSession() {
-    // Mark session as finished
+
     UserProgressManager.markSessionFinished(this, selectedUserID, sessionId);
 
-    // Reset state and navigate to home
     currentItemIndex = 0;
     currentItemAttempt = 1;
     Intent intent = new Intent(DrawingActivity.this, HomeActivity.class);
@@ -301,7 +294,6 @@ public class DrawingActivity extends BaseActivity {
     clearButton.setOnClickListener(v -> {
       reInitializeDrawingView();
       drawingDataList.clear();
-      startTimestamp = null;
     });
   }
 
@@ -314,21 +306,37 @@ public class DrawingActivity extends BaseActivity {
   }
 
   private void setupDrawingStrokeListener() {
-    drawingView.setOnStrokeListener((x, y, timestamp, action) -> {
-      long time = (startTimestamp == null) ? 0 : (timestamp - startTimestamp);
+    drawingView.setOnStrokeListener((x, y, timestamp, action, size, pressure, orientation) -> {
       int currentItemID = items.get(currentItemIndex).getId();
       Item.Type currentItemType = items.get(currentItemIndex).getType();
 
       int imageID = (currentItemType == Item.Type.IMAGE) ? currentItemID : -1;
 
-      // Create initial START event if this is the first point
       if (currentItemID != -1 && drawingDataList.isEmpty()) {
-        startTimestamp = timestamp;
-        createDrawingDataPoint(time, x, y, ACTION_START, imageID, currentItemType);
+        createDrawingDataPoint(
+            timestamp,
+            x,
+            y,
+            ACTION_START,
+            imageID,
+            currentItemType,
+            size,
+            pressure,
+            orientation
+        );
       }
 
-      // Always add the current point with the provided action
-      createDrawingDataPoint(time, x, y, action, imageID, currentItemType);
+      createDrawingDataPoint(
+          timestamp,
+          x,
+          y,
+          action,
+          imageID,
+          currentItemType,
+          size,
+          pressure,
+          orientation
+      );
     });
   }
 
@@ -338,7 +346,10 @@ public class DrawingActivity extends BaseActivity {
       float y,
       String action,
       int imageID,
-      Item.Type itemType
+      Item.Type itemType,
+      float size,
+      float pressure,
+      float orientation
   ) {
     drawingDataList.add(new DrawingData.Builder()
                             .time(time)
@@ -350,27 +361,26 @@ public class DrawingActivity extends BaseActivity {
                             .itemType(itemType)
                             .attempt(currentItemAttempt)
                             .sessionID(sessionId)
+                            .size(size)
+                            .pressure(pressure)
+                            .orientation(orientation)
                             .build());
   }
 
   private void loadItems() {
-    // Get raw data
+
     List<Image> allImages = db.imageDao().getAllImages();
     Set<Integer> selectedImageIds = SelectedImagesManager.getSelectedImages(this);
 
-    // Filter to selected images
     items.clear();
     List<Image> selectedImages = getSelectedImages(allImages, selectedImageIds);
 
-    // Process ordering
     List<Image> orderedImages = orderImages(selectedImages);
 
-    // Convert to items
     for (Image image : orderedImages) {
       items.add(new Item(image.id, image.name, image.source, image.path, Item.Type.IMAGE));
     }
 
-    // Update UI
     updateUIWithItems();
   }
 
@@ -418,7 +428,6 @@ public class DrawingActivity extends BaseActivity {
   private List<Image> createOrderedImageList(List<Image> selectedImages, List<Integer> savedOrder) {
     List<Image> orderedImages = new ArrayList<>();
 
-    // First add images in specified order
     for (Integer id : savedOrder) {
       for (Image image : selectedImages) {
         if (image.id == id) {
@@ -428,7 +437,6 @@ public class DrawingActivity extends BaseActivity {
       }
     }
 
-    // Add any new images that weren't in the saved order
     for (Image image : selectedImages) {
       if (!orderedImages.contains(image)) {
         orderedImages.add(image);
@@ -459,24 +467,34 @@ public class DrawingActivity extends BaseActivity {
   }
 
   private void displayImageItem(Item currentItem) {
-    if (currentItem.getSource().equals(SOURCE_DEFAULT)) {
-      // Default image from resources
-      referenceImage.setImageTintList(getResources().getColorStateList(R.color.onSurface, null));
-      int resourceId = Integer.parseInt(currentItem.getPath());
-      referenceImage.setImageResource(resourceId);
-    } else {
-      // Custom image from URI
-      referenceImage.setImageTintList(null);
-      referenceImage.setImageURI(android.net.Uri.parse(currentItem.getPath()));
+    if (currentItem == null) {
+      return;
     }
-    referenceImage.setVisibility(View.VISIBLE);
+
+    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+    String drawingMode = prefs.getString(Constants.KEY_DRAWING_MODE, Constants.DRAWING_MODE_NORMAL);
+
+    ImageView mainRefImage = findViewById(R.id.reference_image);
+    ImageView overlayRefImage = findViewById(R.id.overlay_reference_image);
+
+    ImageLoader.loadImageIntoView(this, currentItem, mainRefImage);
+    ImageLoader.loadImageIntoView(this, currentItem, overlayRefImage);
+
+    if (Constants.DRAWING_MODE_OVERLAY.equals(drawingMode)) {
+
+      mainRefImage.setVisibility(View.GONE);
+      overlayRefImage.setVisibility(View.VISIBLE);
+    } else {
+
+      mainRefImage.setVisibility(View.VISIBLE);
+      overlayRefImage.setVisibility(View.GONE);
+    }
   }
 
   private void saveDrawingToDatabase() {
     executor.execute(() -> {
       db.drawingDataDao().insertAll(drawingDataList);
       drawingDataList.clear();
-      startTimestamp = null;
     });
   }
 

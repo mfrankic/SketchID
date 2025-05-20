@@ -12,7 +12,6 @@ import java.util.Objects;
 
 public class SettingsActivity extends BaseActivity {
 
-
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     SettingsFragment settingsFragment;

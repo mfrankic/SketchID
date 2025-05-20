@@ -65,6 +65,16 @@
             android:summary="Enter a number of drawing attempts"
             android:title="Number of Drawing Attempts" />
 
+        <ListPreference
+            android:defaultValue="normal"
+            android:dialogTitle="Choose Drawing Mode"
+            android:entries="@array/drawing_mode_entries"
+            android:entryValues="@array/drawing_mode_values"
+            android:icon="@android:drawable/ic_menu_view"
+            android:key="@string/key_drawing_mode"
+            android:summary="Select drawing display mode"
+            android:title="Drawing Mode" />
+
         <Preference
             android:icon="@android:drawable/ic_menu_gallery"
             android:key="@string/key_select_images"

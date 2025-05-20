@@ -12,9 +12,9 @@ public class Image {
   @ColumnInfo(name = "name")
   public String name;
   @ColumnInfo(name = "source")
-  public String source; // "default" or "custom"
+  public String source;
   @ColumnInfo(name = "path")
-  public String path; // For custom images, stores the file path or URI
+  public String path;
 
   public Image(String name, String source, String path) {
     this.name = name;

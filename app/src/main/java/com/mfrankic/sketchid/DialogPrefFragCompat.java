@@ -42,16 +42,10 @@ public class DialogPrefFragCompat extends DialogFragment {
     CharSequence negativeText = args.getCharSequence(ARG_NEGATIVE_TEXT);
     final String value = args.getString(ARG_VALUE);
 
-    // Log the values again to ensure they're still available
-    Log.d(TAG, "Creating dialog with title: " + title);
-    Log.d(TAG, "Creating dialog with message: " + message);
-
-    // Create a custom view with a TextView for the message
     if (TextUtils.isEmpty(message)) {
       message = "No message available";
     }
 
-    // Create the dialog with a simple message
     return new AlertDialog.Builder(requireContext())
         .setTitle(title)
         .setMessage(message)

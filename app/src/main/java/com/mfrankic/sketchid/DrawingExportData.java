@@ -1,5 +1,7 @@
 package com.mfrankic.sketchid;
 
+import androidx.room.Ignore;
+
 public class DrawingExportData {
   private int id;
   private long time;
@@ -12,6 +14,13 @@ public class DrawingExportData {
   private Item.Type itemType;
   private int imageID;
   private String imageName;
+  private String sessionID;
+  private float size;
+  private float pressure;
+  private float orientation;
+
+  @Ignore
+  private String drawingMode;
 
   public int getId() {
     return id;
@@ -99,5 +108,45 @@ public class DrawingExportData {
 
   public void setImageName(String imageName) {
     this.imageName = imageName;
+  }
+
+  public String getSessionID() {
+    return sessionID;
+  }
+
+  public void setSessionID(String sessionID) {
+    this.sessionID = sessionID;
+  }
+
+  public float getSize() {
+    return size;
+  }
+
+  public void setSize(float size) {
+    this.size = size;
+  }
+
+  public float getPressure() {
+    return pressure;
+  }
+
+  public void setPressure(float pressure) {
+    this.pressure = pressure;
+  }
+
+  public float getOrientation() {
+    return orientation;
+  }
+
+  public void setOrientation(float orientation) {
+    this.orientation = orientation;
+  }
+
+  public String getDrawingMode() {
+    return drawingMode != null ? drawingMode : Constants.DRAWING_MODE_NORMAL;
+  }
+
+  public void setDrawingMode(String drawingMode) {
+    this.drawingMode = drawingMode;
   }
 }

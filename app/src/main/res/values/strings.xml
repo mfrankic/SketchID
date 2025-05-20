@@ -25,6 +25,7 @@
     <string name="key_reset_user_progress">reset_user_progress</string>
     <string name="key_export_all_data">export_all_data</string>
     <string name="key_upload_all_data">upload_all_data</string>
+    <string name="key_drawing_mode">drawing_mode</string>
 
     <!-- Image selection activity -->
     <string name="available_images">Available Images</string>

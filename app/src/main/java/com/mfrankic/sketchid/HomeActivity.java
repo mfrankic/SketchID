@@ -59,7 +59,7 @@ public class HomeActivity extends BaseActivity {
       if (selectedUserID == -1) {
         Toast.makeText(this, "Please select a user before drawing.", Toast.LENGTH_LONG).show();
       } else {
-        // Check if drawing attempts are set
+
         String attempts = PreferenceManager
             .getDefaultSharedPreferences(this)
             .getString(KEY_DRAWING_ATTEMPTS, "-1");
@@ -73,7 +73,6 @@ public class HomeActivity extends BaseActivity {
           return;
         }
 
-        // Check if there are any selected images before starting the activity
         Set<Integer> selectedImageIds = SelectedImagesManager.getSelectedImages(this);
         if (selectedImageIds.isEmpty()) {
           Toast

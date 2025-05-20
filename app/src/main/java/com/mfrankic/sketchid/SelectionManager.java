@@ -13,7 +13,7 @@ import java.util.function.Consumer;
 public class SelectionManager<T> {
   private final Set<T> selected = new HashSet<>();
   private final Consumer<Integer> onChanged;
-  // For tracking affected items in bulk operations
+
   private final Set<Integer> affectedPositions = new HashSet<>();
   private boolean enabled = false;
 
@@ -37,7 +37,7 @@ public class SelectionManager<T> {
     if (!enabled) {
       selected.clear();
     }
-    onChanged.accept(-1); // Still need full refresh when mode changes
+    onChanged.accept(-1);
   }
 
   /**
@@ -82,10 +82,8 @@ public class SelectionManager<T> {
   public void clearSelections() {
     if (selected.isEmpty()) return;
 
-    // Track which items were selected before clearing
     affectedPositions.clear();
 
-    // We still need a full refresh here since multiple items are affected
     selected.clear();
     onChanged.accept(-1);
   }
@@ -101,7 +99,6 @@ public class SelectionManager<T> {
     affectedPositions.clear();
     Set<T> toRemove = new HashSet<>();
 
-    // Find items to remove
     for (T item : selected) {
       if (!newList.contains(item)) {
         toRemove.add(item);
@@ -111,9 +108,6 @@ public class SelectionManager<T> {
     if (!toRemove.isEmpty()) {
       selected.removeAll(toRemove);
 
-      // If only a few items were affected, we could track them
-      // but since this is called during list changes, it's safer
-      // to do a full refresh
       onChanged.accept(-1);
     }
   }

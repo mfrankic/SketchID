@@ -30,18 +30,13 @@ public class ResourceUtils {
   public static void initialize() {
     if (initialized) return;
 
-    // Add all drawable resources that will be accessed by name
-    // This is much more efficient than using getIdentifier at runtime
     initializeDrawableMap();
 
     initialized = true;
-
-    // Log all mappings in debug builds
-    logDrawableMappings();
   }
 
   private static void initializeDrawableMap() {
-    // Map all drawable resources found in the project
+
     drawableResourceMap.put("arrow", R.drawable.arrow);
     drawableResourceMap.put("crown", R.drawable.crown);
     drawableResourceMap.put("envelope", R.drawable.envelope);
@@ -53,16 +48,6 @@ public class ResourceUtils {
     drawableResourceMap.put("star", R.drawable.star);
     drawableResourceMap.put("sun", R.drawable.sun);
     drawableResourceMap.put("umbrella", R.drawable.umbrella);
-  }
-
-  /**
-   * Log all available drawable mappings for debugging
-   */
-  private static void logDrawableMappings() {
-    Log.d(TAG, "Available drawable mappings:");
-    for (Map.Entry<String, Integer> entry : drawableResourceMap.entrySet()) {
-      Log.d(TAG, "  - " + entry.getKey() + " => " + entry.getValue());
-    }
   }
 
   /**

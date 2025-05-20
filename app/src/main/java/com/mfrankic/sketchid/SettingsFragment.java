@@ -42,8 +42,11 @@ import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -63,6 +66,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   private Executor executor;
   private AppDatabase db;
   private ListPreference userListPreference;
+  private ListPreference drawingModePreference;
   private CustomDialogPreference deleteUserPreference;
   private CustomDialogPreference deleteUserDataPreference;
   private String selectedUserID;
@@ -88,6 +92,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     newUserPreference = findPreference(getResources().getText(R.string.key_new_user));
     drawingAttemptsPreference
         = findPreference(getResources().getText(R.string.key_drawing_attempts));
+    drawingModePreference = findPreference(getResources().getText(R.string.key_drawing_mode));
     exportDataPreference = findPreference(getResources().getText(R.string.key_export_data));
     uploadDataPreference = findPreference(getResources().getText(R.string.key_upload_data));
     exportAllDataPreference = findPreference(getResources().getText(R.string.key_export_all_data));
@@ -103,6 +108,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     setupNewUserPreference();
     setupDeleteUserPreference();
     setupDrawingAttemptsPreference();
+    setupDrawingModePreference();
     setupExportDataPreference();
     setupUploadDataPreference();
     setupExportAllDataPreference();
@@ -114,19 +120,17 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
     loadUsersIntoListPreference();
 
-    // Check for unfinished users in a background thread
     executor.execute(this::checkUnfinishedUsersInitial);
 
-    // Register fragment result listener for dialog preference results
     getParentFragmentManager().setFragmentResultListener(
         DIALOG_RESULT_KEY, this, (requestKey, result) -> {
-          // Get preference key from result bundle
+
           String preferenceKey = result.getString(DIALOG_PREFERENCE_KEY);
           if (preferenceKey != null) {
-            // Find the preference that was clicked
+
             Preference preference = findPreference(preferenceKey);
             if (preference instanceof CustomDialogPreference) {
-              // Call the preference's change listener with the result value
+
               boolean changed = result.getBoolean("changed", false);
               if (changed) {
                 (preference).callChangeListener(true);
@@ -140,8 +144,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   @Override
   public void onDisplayPreferenceDialog(@NonNull Preference preference) {
     if (preference instanceof CustomDialogPreference) {
-      // Skip showing dialog for all CustomDialogPreference instances
-      // We're handling the dialogs with AlertDialog directly
+
       return;
     }
     super.onDisplayPreferenceDialog(preference);
@@ -170,15 +173,14 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
   private void setupNewUserPreference() {
     if (newUserPreference != null) {
-      // Set dialog properties
+
       newUserPreference.setOnBindEditTextListener(editText -> {
-        // Set the hint for the text field
+
         editText.setHint("Name");
-        // Clear any existing text and set cursor at the beginning
+
         editText.setText("");
       });
 
-      // Handle user submission
       newUserPreference.setOnPreferenceChangeListener((preference, newValue) -> {
         String name = newValue.toString().trim();
         if (name.isEmpty()) {
@@ -186,26 +188,22 @@ public class SettingsFragment extends PreferenceFragmentCompat {
           return false;
         }
 
-        // Add the new user to the database
         executor.execute(() -> {
           User user = new User(name);
           String newUserID = Long.toString(db.userDao().insertUser(user));
 
-          // Update the selected user preference
           PreferenceManager
               .getDefaultSharedPreferences(requireContext())
               .edit()
               .putString(KEY_SELECTED_USER, newUserID)
               .apply();
 
-          // Reload the user list preference
           requireActivity().runOnUiThread(this::loadUsersIntoListPreference);
         });
 
         return true;
       });
 
-      // Don't store text in preferences
       newUserPreference.setPersistent(false);
     }
   }
@@ -268,9 +266,9 @@ public class SettingsFragment extends PreferenceFragmentCompat {
           R.color.error,
           requireContext().getTheme()
       ));
-      // Set up click listener to show a direct AlertDialog
+
       deleteUserPreference.setOnPreferenceClickListener(preference -> {
-        // Only proceed if a user is selected
+
         if (isNotValidUserSelected()) {
           return true;
         }
@@ -278,11 +276,9 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         String dialogMessage = createDeleteUserMessage();
         Drawable dialogIcon = createWarningIcon();
 
-        // Create and show the alert dialog
         AlertDialog alertDialog = createDeleteUserDialog(dialogMessage, dialogIcon);
         alertDialog.show();
 
-        // Apply tint to the positive button
         applyErrorTintToPositiveButton(alertDialog);
 
         return true;
@@ -305,7 +301,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   }
 
   private Drawable createWarningIcon() {
-    // Get and tint the icon
+
     Drawable dialogIcon = ResourcesCompat.getDrawable(
         getResources(),
         android.R.drawable.ic_dialog_alert,
@@ -337,10 +333,8 @@ public class SettingsFragment extends PreferenceFragmentCompat {
             .makeText(getContext(), "User deleted", Toast.LENGTH_LONG)
             .show());
 
-        // Delete user's drawing data from the database
         db.drawingDataDao().deleteDrawingDataByUserID(Long.parseLong(selectedUserID));
 
-        // Delete user's session data
         UserProgressManager.deleteUserSessions(requireContext(), Long.parseLong(selectedUserID));
 
         PreferenceManager
@@ -366,8 +360,8 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       alertDialog.setOnShowListener(dialog -> alertDialog
           .getButton(DialogInterface.BUTTON_POSITIVE)
           .setTextColor(errorColor));
-    } catch (Exception e) {
-      // Ignore styling errors
+    } catch (Exception ignored) {
+      // Ignore any exceptions related to tinting
     }
   }
 
@@ -420,6 +414,35 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     });
   }
 
+  private void setupDrawingModePreference() {
+    if (drawingModePreference != null) {
+
+      SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+      String currentMode = prefs.getString(
+          Constants.KEY_DRAWING_MODE,
+          Constants.DRAWING_MODE_NORMAL
+      );
+      int index = drawingModePreference.findIndexOfValue(currentMode);
+      if (index >= 0) {
+        drawingModePreference.setSummary(String.format(
+            "Current mode: %s",
+            drawingModePreference.getEntries()[index]
+        ));
+      }
+
+      drawingModePreference.setOnPreferenceChangeListener((preference, newValue) -> {
+        int idx = drawingModePreference.findIndexOfValue(newValue.toString());
+        if (idx >= 0) {
+          drawingModePreference.setSummary(String.format(
+              "Current mode: %s",
+              drawingModePreference.getEntries()[idx]
+          ));
+        }
+        return true;
+      });
+    }
+  }
+
   private void setupExportDataPreference() {
     if (exportDataPreference != null) {
       exportDataPreference.setOnPreferenceClickListener(preference -> {
@@ -433,78 +456,106 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     exportDataToCSV(false);
   }
 
-  private boolean exportDataToCSV(boolean silent) {
-    List<DrawingExportData> drawingDataList = db
-        .drawingDataDao()
-        .getAllDrawingDataWithUsersAndImagesByUserID(Long.parseLong(selectedUserID));
-    String timestamp = new SimpleDateFormat(
-        Constants.EXPORT_DATE_FORMAT,
-                                            Locale.getDefault()
-    ).format(new Date());
-    String fileName = userListPreference.getEntry()
-                      + Constants.DRAWING_DATA_PREFIX
-                      + timestamp
-                      + ".csv";
-    ContentResolver contentResolver = requireActivity().getContentResolver();
+  private void setupDeleteUserDataPreference() {
+    if (deleteUserDataPreference != null) {
+      deleteUserDataPreference.setTitleColor(getResources().getColor(
+          R.color.error,
+          requireContext().getTheme()
+      ));
 
-    File exportDir
-        = new File(
-        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-        Constants.SKETCHID_DATA_DIR
-    );
-    if (!exportDir.exists() && !exportDir.mkdirs()) {
-      requireActivity().runOnUiThread(() -> Toast
-          .makeText(getContext(), Constants.FAILED_EXPORT_MESSAGE, Toast.LENGTH_LONG)
-          .show());
-      return false;
-    }
+      deleteUserDataPreference.setOnPreferenceClickListener(preference -> {
 
-    File file = new File(exportDir, fileName);
-    Uri exportFileUri = Uri.fromFile(file);
-
-    if (exportFileUri != null) {
-      try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
-        if (outputStream != null) {
-          outputStream.write(Constants.COLUMN_HEADERS.getBytes());
-          for (DrawingExportData data : drawingDataList) {
-            String row = String.format(
-                Locale.getDefault(),
-                Constants.FILE_EXPORT_PATTERN,
-                data.getId(),
-                data.getUserID(),
-                data.getUserName(),
-                data.getAttempt(),
-                data.getTime(),
-                data.getX(),
-                data.getY(),
-                data.getAction(),
-                data.getItemType(),
-                data.getImageID(),
-                data.getImageName()
-            );
-            outputStream.write(row.getBytes());
-          }
-          if (!silent) {
-            requireActivity().runOnUiThread(() -> Toast
-                .makeText(
-                    getContext(),
-                    "Data exported to Downloads/SketchIDData",
-                    Toast.LENGTH_LONG
-                )
-                .show());
-          }
+        if (isNotValidUserSelected()) {
+          return true;
         }
-      } catch (IOException e) {
-        requireActivity().runOnUiThread(() -> Toast
-            .makeText(getContext(), "Failed to export data", Toast.LENGTH_LONG)
-            .show());
-        return false;
-      }
-    }
 
-    // For use in uploadDataToFirebase method
-    fileUri = exportFileUri;
-    return true;
+        String dialogMessage = createDeleteUserDataMessage();
+        Drawable dialogIcon = createWarningIcon();
+
+        AlertDialog alertDialog = createDeleteUserDataDialog(dialogMessage, dialogIcon);
+        alertDialog.show();
+
+        applyErrorTintToPositiveButton(alertDialog);
+
+        return true;
+      });
+    }
+  }
+
+  private String createDeleteUserDataMessage() {
+    return String.format(
+        "Are you sure you want to delete drawing data for "
+        + "user: %s?%n%nThis will remove all "
+        + "drawing history but keep the user profile.",
+        userListPreference.getEntry()
+    );
+  }
+
+  private void setupClearDataPreference() {
+    if (clearDataPreference != null) {
+      clearDataPreference.setTitleColor(getResources().getColor(
+          R.color.error,
+          requireContext().getTheme()
+      ));
+
+      clearDataPreference.setOnPreferenceClickListener(preference -> {
+        String dialogMessage = "Are you sure you want to delete ALL drawing data for ALL users?%n%n"
+                               + "This action will permanently remove all drawing data from the "
+                               + "database and cannot be undone.";
+
+        Drawable dialogIcon = ResourcesCompat.getDrawable(
+            getResources(),
+            android.R.drawable.ic_dialog_alert,
+            null
+        );
+
+        if (dialogIcon != null) {
+          dialogIcon.setTint(getResources().getColor(R.color.error, requireContext().getTheme()));
+        }
+
+        AlertDialog alertDialog = new AlertDialog.Builder(requireContext())
+            .setTitle("Clear All Drawing Data?")
+            .setMessage(dialogMessage)
+            .setIcon(dialogIcon)
+            .setPositiveButton(
+                DELETE_BUTTON, (dialog, which) ->
+
+                    executor.execute(() -> {
+                      db.drawingDataDao().deleteAllDrawingData();
+                      SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(
+                          requireContext());
+                      prefs
+                          .edit()
+                          .remove(KEY_CURRENT_ITEM_ATTEMPT)
+                          .remove(KEY_CURRENT_ITEM_INDEX)
+                          .apply();
+
+                      requireActivity().runOnUiThread(() -> Toast
+                          .makeText(
+                              requireContext(),
+                              "All drawing data cleared!",
+                              Toast.LENGTH_LONG
+                          )
+                          .show());
+                    })
+            )
+            .setNegativeButton(CANCEL_BUTTON, null)
+            .create();
+
+        alertDialog.show();
+
+        try {
+          int errorColor = getResources().getColor(R.color.error, requireContext().getTheme());
+          alertDialog.setOnShowListener(dialog -> alertDialog
+              .getButton(DialogInterface.BUTTON_POSITIVE)
+              .setTextColor(errorColor));
+        } catch (Exception ignored) {
+          // Ignore any exceptions related to tinting
+        }
+
+        return true;
+      });
+    }
   }
 
   private void setupUploadDataPreference() {
@@ -558,135 +609,188 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     }
   }
 
-  private boolean exportAllDataToCSV() {
-    // Get all users
-    List<User> users = db.userDao().getAllUsers();
-    if (users.isEmpty()) {
-      requireActivity().runOnUiThread(() -> Toast
-          .makeText(getContext(), "No users found to export data", Toast.LENGTH_LONG)
-          .show());
-      return false;
-    }
+  private void setupSelectImagePreference() {
+    if (selectImagePreference != null) {
+      ActivityResultLauncher<Intent> imageSelectionLauncher = registerForActivityResult(
+          new ActivityResultContracts.StartActivityForResult(), result -> {
+            if (result.getResultCode() == android.app.Activity.RESULT_OK
+                && result.getData() != null) {
+              int selectedImageId = result.getData().getIntExtra("selected_image_id", -1);
+              if (selectedImageId != -1) {
 
-    // Create export directory
-    File exportDir = new File(
-        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-        "SketchIDData"
-    );
-    if (!exportDir.exists() && !exportDir.mkdirs()) {
-      requireActivity().runOnUiThread(() -> Toast
-          .makeText(getContext(), "Failed to create export directory", Toast.LENGTH_LONG)
-          .show());
-      return false;
-    }
-
-    ContentResolver contentResolver = requireActivity().getContentResolver();
-    boolean allExported = true;
-    String timestamp = new SimpleDateFormat(
-        Constants.EXPORT_DATE_FORMAT,
-                                            Locale.getDefault()
-    ).format(new Date());
-
-    // Export data for each user
-    for (User user : users) {
-      List<DrawingExportData> drawingDataList = db
-          .drawingDataDao()
-          .getAllDrawingDataWithUsersAndImagesByUserID(user.id);
-
-      if (drawingDataList.isEmpty()) {
-        continue; // Skip users with no data
-      }
-
-      String fileName = user.name + "_drawing_data_" + timestamp + ".csv";
-      File file = new File(exportDir, fileName);
-      Uri exportFileUri = Uri.fromFile(file);
-
-      try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
-        if (outputStream != null) {
-          outputStream.write((
-                                 "id,userID,userName,attempt,time,x,y,action,itemType,imageID,"
-                                 + "imageName%n"
-                             ).getBytes());
-
-          for (DrawingExportData data : drawingDataList) {
-            String row = String.format(
-                Locale.getDefault(),
-                "%d,%d,%s,%d,%d,%s,%s,%s,%s,%d,%s%n",
-                data.getId(),
-                data.getUserID(),
-                data.getUserName(),
-                data.getAttempt(),
-                data.getTime(),
-                data.getX(),
-                data.getY(),
-                data.getAction(),
-                data.getItemType(),
-                data.getImageID(),
-                data.getImageName()
-            );
-            outputStream.write(row.getBytes());
+                Toast
+                    .makeText(
+                        getContext(),
+                        "Image selected: " + selectedImageId,
+                        Toast.LENGTH_SHORT
+                    )
+                    .show();
+              }
+            }
           }
-        }
-      } catch (IOException e) {
-        allExported = false;
-        requireActivity().runOnUiThread(() -> Toast
-            .makeText(
-                getContext(),
-                "Failed to export data for user: " + user.name,
-                Toast.LENGTH_LONG
-            )
-            .show());
-      }
-    }
+      );
 
-    if (allExported) {
-      requireActivity().runOnUiThread(() -> Toast
-          .makeText(
-              getContext(),
-              "All drawing data exported to Downloads/SketchIDData",
-              Toast.LENGTH_LONG
-          )
-          .show());
+      selectImagePreference.setOnPreferenceClickListener(preference -> {
+        Intent intent = new Intent(getActivity(), ImageSelectionActivity.class);
+        imageSelectionLauncher.launch(intent);
+        return true;
+      });
     }
-
-    return allExported;
   }
 
-  private void setupDeleteUserDataPreference() {
-    if (deleteUserDataPreference != null) {
-      deleteUserDataPreference.setTitleColor(getResources().getColor(
+  private void setupResetUserProgressPreference() {
+    if (resetUserProgressPreference != null) {
+      resetUserProgressPreference.setTitleColor(getResources().getColor(
           R.color.error,
           requireContext().getTheme()
       ));
-      // Set up click listener to show a direct AlertDialog
-      deleteUserDataPreference.setOnPreferenceClickListener(preference -> {
-        // Only proceed if a user is selected
-        if (isNotValidUserSelected()) {
-          return true;
+
+      if (unfinishedUsers.isEmpty()) {
+        resetUserProgressPreference.setVisible(false);
+      }
+
+      resetUserProgressPreference.setOnPreferenceClickListener(preference -> {
+
+        String userNames = buildUnfinishedUsersList();
+
+        String dialogMessage = String.format(
+            "Resetting progress will delete all unfinished drawing sessions for the listed users,"
+            + " allowing them to start fresh.%n%n"
+            + "This action will:%n"
+            + " • Delete all in-progress drawing data%n"
+            + " • Reset current attempts to zero%n%n"
+            + "%s", userNames
+        );
+
+        Drawable dialogIcon = ResourcesCompat.getDrawable(
+            getResources(),
+            android.R.drawable.ic_dialog_alert,
+            null
+        );
+
+        if (dialogIcon != null) {
+          dialogIcon.setTint(getResources().getColor(R.color.error, requireContext().getTheme()));
         }
 
-        String dialogMessage = createDeleteUserDataMessage();
-        Drawable dialogIcon = createWarningIcon();
+        AlertDialog alertDialog = new AlertDialog.Builder(requireContext())
+            .setTitle("Reset User Progress")
+            .setMessage(dialogMessage)
+            .setIcon(dialogIcon)
+            .setPositiveButton(
+                DELETE_BUTTON,
+                (dialog, which) -> executor.execute(this::resetUserProgress)
+            )
+            .setNegativeButton(CANCEL_BUTTON, null)
+            .create();
 
-        // Create and show the alert dialog
-        AlertDialog alertDialog = createDeleteUserDataDialog(dialogMessage, dialogIcon);
         alertDialog.show();
 
-        // Apply tint to the positive button
-        applyErrorTintToPositiveButton(alertDialog);
+        try {
+          int errorColor = getResources().getColor(R.color.error, requireContext().getTheme());
+          alertDialog.setOnShowListener(dialog -> alertDialog
+              .getButton(DialogInterface.BUTTON_POSITIVE)
+              .setTextColor(errorColor));
+        } catch (Exception ignored) {
+          // Ignore any exceptions related to tinting
+        }
 
         return true;
       });
     }
   }
 
-  private String createDeleteUserDataMessage() {
-    return String.format(
-        "Are you sure you want to delete drawing data for "
-        + "user: %s?%n%nThis will remove all "
-        + "drawing history but keep the user profile.",
-        userListPreference.getEntry()
-    );
+  private String buildUnfinishedUsersList() {
+    if (unfinishedUsers.isEmpty()) {
+      return "No unfinished sessions found.";
+    }
+
+    StringBuilder builder = new StringBuilder();
+    builder.append("The following users have unfinished drawing sessions:\n");
+
+    for (UserProgressManager.UserProgress progress : unfinishedUsers) {
+
+      UserProgressManager.Session session = UserProgressManager.getSession(
+          requireContext(),
+          progress.getUserId(),
+          progress.getSessionId()
+      );
+
+      String attempts = "unknown";
+      String drawingMode = "normal";
+      int totalImages = 0;
+
+      if (session != null && session.getSettings() != null) {
+
+        Object attemptsObj = session.getSettings().get(Constants.DRAWING_KEY_ATTEMPTS);
+        if (attemptsObj != null) {
+          attempts = attemptsObj.toString();
+        }
+
+        Object modeObj = session.getSettings().get(Constants.DRAWING_KEY_MODE);
+        if (modeObj != null) {
+          drawingMode = modeObj.toString();
+        }
+
+        try {
+          Object selectedImagesObj = session
+              .getSettings()
+              .get(Constants.DRAWING_KEY_SELECTED_IMAGE_IDS);
+          if (selectedImagesObj != null) {
+            if (selectedImagesObj instanceof List) {
+              totalImages = ((List<?>) selectedImagesObj).size();
+            } else if (selectedImagesObj.toString().startsWith("[") && selectedImagesObj
+                .toString()
+                .endsWith("]")) {
+
+              String arrayStr = selectedImagesObj.toString();
+
+              if (arrayStr.length() > 2) {
+                totalImages = arrayStr.split(",").length;
+              }
+            }
+          }
+
+          if (totalImages == 0) {
+            Set<Integer> selectedImages = SelectedImagesManager.getSelectedImages(requireContext());
+            totalImages = selectedImages.size();
+          }
+        } catch (Exception ignored) {
+          // Ignore any exceptions related to parsing selected images
+        }
+      }
+
+      if (totalImages == 0) {
+        totalImages = 1;
+      }
+
+      int currentItemIndex = progress.getItemIndex();
+      int currentItemAttempt = progress.getItemAttempt();
+      int attemptsPerImage = 1;
+      try {
+        if (!attempts.equals("unknown")) {
+          attemptsPerImage = Integer.parseInt(attempts);
+        }
+      } catch (NumberFormatException ignored) {
+        // Ignore any exceptions related to parsing attempts
+      }
+
+      int overallAttempt = (currentItemIndex * attemptsPerImage) + currentItemAttempt;
+      int totalAttempts = totalImages * attemptsPerImage;
+
+      builder.append(String.format(
+          Locale.getDefault(),
+          " • %s:%n" + "   ⸰ Progress: %d/%s (%d/%d)%n" + "   ⸰ Mode: %s%n",
+          progress.getUserName(),
+          currentItemAttempt,
+          attempts,
+          overallAttempt,
+          totalAttempts,
+          drawingMode
+      ));
+    }
+
+    builder.append("\nDo you want to reset progress for these users?");
+    return builder.toString();
   }
 
   private AlertDialog createDeleteUserDataDialog(String dialogMessage, Drawable dialogIcon) {
@@ -699,23 +803,16 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         .create();
   }
 
-  private void executeUserDataDeletion() {
-    // Execute data deletion
-    executor.execute(() -> {
-      int deletedRows = db
-          .drawingDataDao()
-          .deleteDrawingDataByUserID(Long.parseLong(selectedUserID));
-      if (deletedRows > 0) {
-        requireActivity().runOnUiThread(() -> Toast
-            .makeText(getContext(), "User drawing data deleted", Toast.LENGTH_LONG)
-            .show());
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-        prefs.edit().remove(KEY_CURRENT_ITEM_ATTEMPT).remove(KEY_CURRENT_ITEM_INDEX).apply();
-      } else {
-        requireActivity().runOnUiThread(() -> Toast
-            .makeText(getContext(), "Failed to delete user drawing data", Toast.LENGTH_LONG)
-            .show());
-      }
+  private void resetUserProgress() {
+
+    for (UserProgressManager.UserProgress progress : unfinishedUsers) {
+      resetSingleUserProgress(progress);
+    }
+
+    requireActivity().runOnUiThread(() -> {
+      showToast("User progress reset successfully");
+      unfinishedUsers.clear();
+      updatePreferencesVisibility();
     });
   }
 
@@ -728,109 +825,134 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     }
   }
 
-  private void uploadAllDataToFirebase() {
-    // Get all users
-    List<User> users = db.userDao().getAllUsers();
-    if (users.isEmpty()) {
-      showToast("No users found to upload data");
-      return;
-    }
-
-    // Create export directory
-    File exportDir = createExportDirectory();
-    if (exportDir == null) {
-      return;
-    }
-
-    ContentResolver contentResolver = requireActivity().getContentResolver();
-    FirebaseStorage storage = FirebaseStorage.getInstance();
-    StorageReference storageRef = storage.getReference();
-    AtomicInteger uploadedCount = new AtomicInteger();
-    int totalUsers = users.size();
-    String timestamp = new SimpleDateFormat(
-        Constants.EXPORT_DATE_FORMAT,
-                                            Locale.getDefault()
-    ).format(new Date());
-
-    UploadContext context = new UploadContext(
-        contentResolver,
-                                              storageRef,
-                                              uploadedCount,
-                                              totalUsers,
-                                              timestamp,
-                                              exportDir
-    );
-
-    // Export and upload data for each user
-    for (User user : users) {
-      List<DrawingExportData> drawingDataList = db
-          .drawingDataDao()
-          .getAllDrawingDataWithUsersAndImagesByUserID(user.id);
-
-      if (drawingDataList.isEmpty()) {
-        continue; // Skip users with no data
-      }
-
-      processUserData(user, drawingDataList, context);
-    }
-  }
-
   private void showToast(String message) {
     requireActivity().runOnUiThread(() -> Toast
         .makeText(getContext(), message, Toast.LENGTH_LONG)
         .show());
   }
 
-  private void processUserData(
-      User user,
-      List<DrawingExportData> drawingDataList,
-      UploadContext context
-  ) {
-    String fileName = user.name + Constants.DRAWING_DATA_PREFIX + context.timestamp + ".csv";
-    File file = new File(context.exportDir, fileName);
-    Uri uploadFileUri = Uri.fromFile(file);
+  private boolean exportDataToCSV(boolean silent) {
+    List<DrawingExportData> drawingDataList = db
+        .drawingDataDao()
+        .getAllDrawingDataWithUsersAndImagesByUserID(Long.parseLong(selectedUserID));
 
-    try (OutputStream outputStream = context.contentResolver.openOutputStream(uploadFileUri)) {
-      if (outputStream != null) {
-        writeUserDataToFile(outputStream, drawingDataList);
-        uploadFileToFirebase(
-            user,
-            fileName,
-            uploadFileUri,
-            context.storageRef,
-            context.uploadedCount,
-            context.totalUsers
-        );
-      }
-    } catch (IOException e) {
-      showToast("Failed to export data for user: " + user.name);
+    processDrawingModes(drawingDataList);
+
+    Map<String, List<DrawingExportData>> dataByMode = groupDataByDrawingMode(drawingDataList);
+
+    ContentResolver contentResolver = requireActivity().getContentResolver();
+    boolean allExported = true;
+
+    File exportDir
+        = new File(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+        Constants.SKETCHID_DATA_DIR
+    );
+    if (!exportDir.exists() && !exportDir.mkdirs()) {
+      requireActivity().runOnUiThread(() -> Toast
+          .makeText(getContext(), Constants.FAILED_EXPORT_MESSAGE, Toast.LENGTH_LONG)
+          .show());
+      return false;
     }
+
+    for (Map.Entry<String, List<DrawingExportData>> entry : dataByMode.entrySet()) {
+      String mode = entry.getKey();
+      List<DrawingExportData> modeData = entry.getValue();
+
+      if (modeData.isEmpty()) {
+        continue;
+      }
+
+      String timestamp = new SimpleDateFormat(
+          Constants.EXPORT_DATE_FORMAT,
+                                              Locale.getDefault()
+      ).format(new Date());
+
+      String fileName = userListPreference.getEntry()
+                        + Constants.DRAWING_DATA_PREFIX
+                        + "mode_"
+                        + mode
+                        + "_"
+                        + timestamp
+                        + ".csv";
+
+      File file = new File(exportDir, fileName);
+      Uri exportFileUri = Uri.fromFile(file);
+
+      if (exportFileUri != null) {
+        try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
+          if (outputStream != null) {
+            outputStream.write(Constants.COLUMN_HEADERS.getBytes());
+            for (DrawingExportData data : modeData) {
+              String row = String.format(
+                  Locale.getDefault(),
+                  Constants.FILE_EXPORT_PATTERN,
+                  data.getId(),
+                  data.getUserID(),
+                  data.getUserName(),
+                  data.getAttempt(),
+                  data.getTime(),
+                  data.getX(),
+                  data.getY(),
+                  data.getAction(),
+                  data.getItemType(),
+                  data.getImageID(),
+                  data.getImageName(),
+                  data.getDrawingMode(),
+                  data.getSize(),
+                  data.getPressure(),
+                  data.getOrientation()
+              );
+              outputStream.write(row.getBytes());
+            }
+
+            if (mode.equals(Constants.DRAWING_MODE_NORMAL)) {
+              fileUri = exportFileUri;
+            }
+          }
+        } catch (IOException e) {
+          allExported = false;
+          requireActivity().runOnUiThread(() -> Toast
+              .makeText(getContext(), "Failed to export data for mode: " + mode, Toast.LENGTH_LONG)
+              .show());
+        }
+      }
+    }
+
+    if (allExported && !silent) {
+      requireActivity().runOnUiThread(() -> Toast
+          .makeText(getContext(), "Data exported to Downloads/SketchIDData", Toast.LENGTH_LONG)
+          .show());
+    }
+
+    return allExported;
   }
 
-  private void writeUserDataToFile(
-      OutputStream outputStream,
-      List<DrawingExportData> drawingDataList
-  )
-  throws IOException {
-    outputStream.write(Constants.COLUMN_HEADERS.getBytes());
-
+  /**
+   * Process drawing data to add drawing mode information from session settings
+   */
+  private void processDrawingModes(List<DrawingExportData> drawingDataList) {
     for (DrawingExportData data : drawingDataList) {
-      String row = String.format(
-          Locale.getDefault(),
-          Constants.FILE_EXPORT_PATTERN,
-          data.getId(),
-          data.getUserID(),
-          data.getUserName(),
-          data.getAttempt(),
-          data.getTime(),
-          data.getX(),
-          data.getY(),
-          data.getAction(),
-          data.getItemType(),
-          data.getImageID(),
-          data.getImageName()
-      );
-      outputStream.write(row.getBytes());
+      if (data.getSessionID() != null) {
+        UserProgressManager.Session session = UserProgressManager.getSession(
+            requireContext(),
+            data.getUserID(),
+            data.getSessionID()
+        );
+
+        if (session != null && session.getSettings() != null) {
+          Object modeObj = session.getSettings().get(Constants.DRAWING_KEY_MODE);
+          if (modeObj != null) {
+            data.setDrawingMode(modeObj.toString());
+          } else {
+            data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
+          }
+        } else {
+          data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
+        }
+      } else {
+        data.setDrawingMode(Constants.DRAWING_MODE_NORMAL);
+      }
     }
   }
 
@@ -869,200 +991,326 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     return exportDir;
   }
 
-  private void setupClearDataPreference() {
-    if (clearDataPreference != null) {
-      clearDataPreference.setTitleColor(getResources().getColor(
-          R.color.error,
-          requireContext().getTheme()
-      ));
-      // Set up click listener to show a direct AlertDialog
-      clearDataPreference.setOnPreferenceClickListener(preference -> {
-        String dialogMessage = "Are you sure you want to delete ALL drawing data for ALL users?%n%n"
-                               + "This action will permanently remove all drawing data from the "
-                               + "database and cannot be undone.";
+  /**
+   * Group drawing data by drawing mode
+   */
+  private Map<String, List<DrawingExportData>> groupDataByDrawingMode(
+      List<DrawingExportData> drawingDataList
+  ) {
+    Map<String, List<DrawingExportData>> dataByMode = new HashMap<>();
 
-        // Get and tint the icon
-        Drawable dialogIcon = ResourcesCompat.getDrawable(
-            getResources(),
-            android.R.drawable.ic_dialog_alert,
-            null
-        );
+    dataByMode.put(Constants.DRAWING_MODE_NORMAL, new ArrayList<>());
+    dataByMode.put(Constants.DRAWING_MODE_OVERLAY, new ArrayList<>());
 
-        if (dialogIcon != null) {
-          dialogIcon.setTint(getResources().getColor(R.color.error, requireContext().getTheme()));
-        }
-
-        // Create and show the alert dialog
-        AlertDialog alertDialog = new AlertDialog.Builder(requireContext())
-            .setTitle("Clear All Drawing Data?")
-            .setMessage(dialogMessage)
-            .setIcon(dialogIcon)
-            .setPositiveButton(
-                DELETE_BUTTON, (dialog, which) ->
-                    // Execute clearing all data
-                    executor.execute(() -> {
-                      db.drawingDataDao().deleteAllDrawingData();
-                      SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(
-                          requireContext());
-                      prefs
-                          .edit()
-                          .remove(KEY_CURRENT_ITEM_ATTEMPT)
-                          .remove(KEY_CURRENT_ITEM_INDEX)
-                          .apply();
-
-                      requireActivity().runOnUiThread(() -> Toast
-                          .makeText(
-                              requireContext(),
-                              "All drawing data cleared!",
-                              Toast.LENGTH_LONG
-                          )
-                          .show());
-                    })
-            )
-            .setNegativeButton(CANCEL_BUTTON, null)
-            .create();
-
-        alertDialog.show();
-
-        // Apply tint to the positive button
-        try {
-          int errorColor = getResources().getColor(R.color.error, requireContext().getTheme());
-          alertDialog.setOnShowListener(dialog -> alertDialog
-              .getButton(DialogInterface.BUTTON_POSITIVE)
-              .setTextColor(errorColor));
-        } catch (Exception e) {
-          // Ignore styling errors
-        }
-
-        return true;
-      });
+    for (DrawingExportData data : drawingDataList) {
+      String mode = data.getDrawingMode();
+      dataByMode.computeIfAbsent(mode, k -> new ArrayList<>()).add(data);
     }
+
+    return dataByMode;
   }
 
-  private void setupSelectImagePreference() {
-    if (selectImagePreference != null) {
-      ActivityResultLauncher<Intent> imageSelectionLauncher = registerForActivityResult(
-          new ActivityResultContracts.StartActivityForResult(), result -> {
-            if (result.getResultCode() == android.app.Activity.RESULT_OK
-                && result.getData() != null) {
-              int selectedImageId = result.getData().getIntExtra("selected_image_id", -1);
-              if (selectedImageId != -1) {
-                // Handle the selected image
-                Toast
-                    .makeText(
-                        getContext(),
-                        "Image selected: " + selectedImageId,
-                        Toast.LENGTH_SHORT
-                    )
-                    .show();
-              }
-            }
-          }
-      );
+  private boolean exportAllDataToCSV() {
 
-      selectImagePreference.setOnPreferenceClickListener(preference -> {
-        Intent intent = new Intent(getActivity(), ImageSelectionActivity.class);
-        imageSelectionLauncher.launch(intent);
-        return true;
-      });
+    List<User> users = db.userDao().getAllUsers();
+    if (users.isEmpty()) {
+      requireActivity().runOnUiThread(() -> Toast
+          .makeText(getContext(), "No users found to export data", Toast.LENGTH_LONG)
+          .show());
+      return false;
     }
-  }
 
-  private void setupResetUserProgressPreference() {
-    if (resetUserProgressPreference != null) {
-      resetUserProgressPreference.setTitleColor(getResources().getColor(
-          R.color.error,
-          requireContext().getTheme()
-      ));
+    File exportDir = new File(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+        "SketchIDData"
+    );
+    if (!exportDir.exists() && !exportDir.mkdirs()) {
+      requireActivity().runOnUiThread(() -> Toast
+          .makeText(getContext(), "Failed to create export directory", Toast.LENGTH_LONG)
+          .show());
+      return false;
+    }
 
-      // Initialize unfinishedUsers list to prevent NPE
-      if (unfinishedUsers.isEmpty()) {
-        resetUserProgressPreference.setVisible(false);
+    ContentResolver contentResolver = requireActivity().getContentResolver();
+    boolean allExported = true;
+    String timestamp = new SimpleDateFormat(
+        Constants.EXPORT_DATE_FORMAT,
+                                            Locale.getDefault()
+    ).format(new Date());
+
+    for (User user : users) {
+      List<DrawingExportData> drawingDataList = db
+          .drawingDataDao()
+          .getAllDrawingDataWithUsersAndImagesByUserID(user.id);
+
+      if (drawingDataList.isEmpty()) {
+        continue;
       }
 
-      resetUserProgressPreference.setOnPreferenceClickListener(preference -> {
-        // Show a custom AlertDialog directly
-        String userNames = buildUnfinishedUsersList();
+      processDrawingModes(drawingDataList);
 
-        String dialogMessage = String.format(
-            "Resetting progress will delete all unfinished drawing sessions for the listed users,"
-            + " allowing them to start fresh.%n%n"
-            + "This action will:%n"
-            + " • Delete all in-progress drawing data%n"
-            + " • Reset current attempts to zero%n"
-            + " • Allow users to start drawing again%n%n"
-            + "The following users have unfinished drawing sessions:%n%s", userNames
-        );
+      Map<String, List<DrawingExportData>> dataByMode = groupDataByDrawingMode(drawingDataList);
 
-        // Get and tint the icon
-        Drawable dialogIcon = ResourcesCompat.getDrawable(
-            getResources(),
-            android.R.drawable.ic_dialog_alert,
-            null
-        );
+      for (Map.Entry<String, List<DrawingExportData>> entry : dataByMode.entrySet()) {
+        String mode = entry.getKey();
+        List<DrawingExportData> modeData = entry.getValue();
 
-        if (dialogIcon != null) {
-          dialogIcon.setTint(getResources().getColor(R.color.error, requireContext().getTheme()));
+        if (modeData.isEmpty()) {
+          continue;
         }
 
-        AlertDialog alertDialog = new AlertDialog.Builder(requireContext())
-            .setTitle("Reset User Progress?")
-            .setMessage(dialogMessage)
-            .setIcon(dialogIcon)
-            .setPositiveButton(
-                DELETE_BUTTON,
-                (dialog, which) -> executor.execute(this::resetUserProgress)
-            )
-            .setNegativeButton(CANCEL_BUTTON, null)
-            .create();
+        String fileName = user.name
+                          + Constants.DRAWING_DATA_PREFIX
+                          + "mode_"
+                          + mode
+                          + "_"
+                          + timestamp
+                          + ".csv";
 
-        alertDialog.show();
+        File file = new File(exportDir, fileName);
+        Uri exportFileUri = Uri.fromFile(file);
 
-        // Apply tint to the positive button
-        try {
-          int errorColor = getResources().getColor(R.color.error, requireContext().getTheme());
-          alertDialog.setOnShowListener(dialog -> alertDialog
-              .getButton(DialogInterface.BUTTON_POSITIVE)
-              .setTextColor(errorColor));
-        } catch (Exception e) {
-          // Ignore styling errors
+        try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
+          if (outputStream != null) {
+            outputStream.write(Constants.COLUMN_HEADERS.getBytes());
+
+            for (DrawingExportData data : modeData) {
+              String row = String.format(
+                  Locale.getDefault(),
+                  Constants.FILE_EXPORT_PATTERN,
+                  data.getId(),
+                  data.getUserID(),
+                  data.getUserName(),
+                  data.getAttempt(),
+                  data.getTime(),
+                  data.getX(),
+                  data.getY(),
+                  data.getAction(),
+                  data.getItemType(),
+                  data.getImageID(),
+                  data.getImageName(),
+                  data.getDrawingMode(),
+                  data.getSize(),
+                  data.getPressure(),
+                  data.getOrientation()
+              );
+              outputStream.write(row.getBytes());
+            }
+          }
+        } catch (IOException e) {
+          allExported = false;
+          requireActivity().runOnUiThread(() -> Toast.makeText(
+              getContext(),
+              "Failed to export data for user: " + user.name + ", mode: " + mode,
+              Toast.LENGTH_LONG
+          ).show());
         }
+      }
+    }
 
-        return true;
-      });
+    if (allExported) {
+      requireActivity().runOnUiThread(() -> Toast
+          .makeText(
+              getContext(),
+              "All drawing data exported to Downloads/SketchIDData",
+              Toast.LENGTH_LONG
+          )
+          .show());
+    }
+
+    return allExported;
+  }
+
+  private void executeUserDataDeletion() {
+
+    executor.execute(() -> {
+      int deletedRows = db
+          .drawingDataDao()
+          .deleteDrawingDataByUserID(Long.parseLong(selectedUserID));
+      if (deletedRows > 0) {
+        requireActivity().runOnUiThread(() -> Toast
+            .makeText(getContext(), "User drawing data deleted", Toast.LENGTH_LONG)
+            .show());
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        prefs.edit().remove(KEY_CURRENT_ITEM_ATTEMPT).remove(KEY_CURRENT_ITEM_INDEX).apply();
+      } else {
+        requireActivity().runOnUiThread(() -> Toast
+            .makeText(getContext(), "Failed to delete user drawing data", Toast.LENGTH_LONG)
+            .show());
+      }
+    });
+  }
+
+  private void uploadAllDataToFirebase() {
+
+    List<User> users = db.userDao().getAllUsers();
+    if (users.isEmpty()) {
+      showToast("No users found to upload data");
+      return;
+    }
+
+    File exportDir = createExportDirectory();
+    if (exportDir == null) {
+      return;
+    }
+
+    ContentResolver contentResolver = requireActivity().getContentResolver();
+    FirebaseStorage storage = FirebaseStorage.getInstance();
+    StorageReference storageRef = storage.getReference();
+    AtomicInteger uploadedCount = new AtomicInteger();
+    int totalUsers = users.size();
+    String timestamp = new SimpleDateFormat(
+        Constants.EXPORT_DATE_FORMAT,
+                                            Locale.getDefault()
+    ).format(new Date());
+
+    UploadContext context = new UploadContext(
+        contentResolver,
+                                              storageRef,
+                                              uploadedCount,
+                                              totalUsers,
+                                              timestamp,
+                                              exportDir
+    );
+
+    for (User user : users) {
+      List<DrawingExportData> drawingDataList = db
+          .drawingDataDao()
+          .getAllDrawingDataWithUsersAndImagesByUserID(user.id);
+
+      if (drawingDataList.isEmpty()) {
+        continue;
+      }
+
+      processUserData(user, drawingDataList, context);
     }
   }
 
-  private String buildUnfinishedUsersList() {
-    StringBuilder userNamesBuilder = new StringBuilder();
-    for (UserProgressManager.UserProgress progress : unfinishedUsers) {
-      // Get details about the session
-      int itemIndex = progress.getItemIndex();
-      int attemptCount = progress.getItemAttempt();
+  private void processUserData(
+      User user,
+      List<DrawingExportData> drawingDataList,
+      UploadContext context
+  ) {
 
-      userNamesBuilder
-          .append(" • ")
-          .append(progress.getUserName())
-          .append(" (Drawing #")
-          .append(itemIndex + 1)
-          .append(", Attempt: ")
-          .append(attemptCount)
-          .append(")\n");
+    processDrawingModes(drawingDataList);
+
+    Map<String, List<DrawingExportData>> dataByMode = groupDataByDrawingMode(drawingDataList);
+
+    for (Map.Entry<String, List<DrawingExportData>> entry : dataByMode.entrySet()) {
+      String mode = entry.getKey();
+      List<DrawingExportData> modeData = entry.getValue();
+
+      if (modeData.isEmpty()) {
+        continue;
+      }
+
+      String fileName = user.name
+                        + Constants.DRAWING_DATA_PREFIX
+                        + "mode_"
+                        + mode
+                        + "_"
+                        + context.timestamp
+                        + ".csv";
+
+      File file = new File(context.exportDir, fileName);
+      Uri uploadFileUri = Uri.fromFile(file);
+
+      try (OutputStream outputStream = context.contentResolver.openOutputStream(uploadFileUri)) {
+        if (outputStream != null) {
+
+          writeUserDataToFile(outputStream, modeData);
+
+          if (mode.equals(Constants.DRAWING_MODE_NORMAL)) {
+            uploadFileToFirebase(
+                user,
+                fileName,
+                uploadFileUri,
+                context.storageRef,
+                context.uploadedCount,
+                context.totalUsers
+            );
+          }
+        }
+      } catch (IOException e) {
+        showToast("Failed to export data for user: " + user.name + ", mode: " + mode);
+      }
     }
-    return userNamesBuilder.toString();
   }
 
-  private void resetUserProgress() {
-    // Reset progress for all unfinished users
-    for (UserProgressManager.UserProgress progress : unfinishedUsers) {
-      resetSingleUserProgress(progress);
+  private void resetSingleUserProgress(UserProgressManager.UserProgress progress) {
+    long userId = progress.getUserId();
+
+    List<UserProgressManager.Session> unfinishedSessions
+        = UserProgressManager.getUnfinishedSessions(requireContext(), userId);
+
+    for (UserProgressManager.Session session : unfinishedSessions) {
+      resetSession(userId, session.getSessionId());
     }
 
-    // Refresh the UI
-    requireActivity().runOnUiThread(() -> {
-      showToast("User progress reset successfully");
-      unfinishedUsers.clear();
-      updatePreferencesVisibility();
+    UserProgressManager.clearUserProgress(requireContext(), userId);
+  }
+
+  private void writeUserDataToFile(
+      OutputStream outputStream,
+      List<DrawingExportData> drawingDataList
+  )
+  throws IOException {
+
+    processDrawingModes(drawingDataList);
+
+    outputStream.write(Constants.COLUMN_HEADERS.getBytes());
+
+    for (DrawingExportData data : drawingDataList) {
+      String row = String.format(
+          Locale.getDefault(),
+          Constants.FILE_EXPORT_PATTERN,
+          data.getId(),
+          data.getUserID(),
+          data.getUserName(),
+          data.getAttempt(),
+          data.getTime(),
+          data.getX(),
+          data.getY(),
+          data.getAction(),
+          data.getItemType(),
+          data.getImageID(),
+          data.getImageName(),
+          data.getDrawingMode(),
+          data.getSize(),
+          data.getPressure(),
+          data.getOrientation()
+      );
+      outputStream.write(row.getBytes());
+    }
+  }
+
+  /**
+   * Checks for unfinished users during initial load
+   * This is separate from the onResume check to prevent UI jumping
+   */
+  private void checkUnfinishedUsersInitial() {
+    unfinishedUsers = UserProgressManager.getUnfinishedUsers(requireContext(), db);
+
+    if (!unfinishedUsers.isEmpty()) {
+      requireActivity().runOnUiThread(this::updatePreferencesVisibility);
+    }
+  }
+
+  @Override
+  public void onResume() {
+    super.onResume();
+
+    executor.execute(() -> {
+      List<UserProgressManager.UserProgress> newUnfinishedUsers
+          = UserProgressManager.getUnfinishedUsers(requireContext(), db);
+
+      boolean wasEmpty = unfinishedUsers.isEmpty();
+      boolean isEmpty = newUnfinishedUsers.isEmpty();
+
+      if (wasEmpty != isEmpty) {
+        unfinishedUsers = newUnfinishedUsers;
+        requireActivity().runOnUiThread(this::updatePreferencesVisibility);
+      }
     });
   }
 
@@ -1070,7 +1318,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     boolean hasUnfinishedUsers = !unfinishedUsers.isEmpty();
 
     if (hasUnfinishedUsers) {
-      // Show reset progress preference and disable certain categories
+
       if (resetUserProgressPreference != null) {
         resetUserProgressPreference.setVisible(true);
       }
@@ -1083,7 +1331,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         dataManagementCategory.setEnabled(false);
       }
     } else {
-      // Hide reset progress preference and enable all categories
+
       if (resetUserProgressPreference != null) {
         resetUserProgressPreference.setVisible(false);
       }
@@ -1098,62 +1346,11 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     }
   }
 
-  private void resetSingleUserProgress(UserProgressManager.UserProgress progress) {
-    long userId = progress.getUserId();
-
-    // Get all unfinished sessions for this user
-    List<UserProgressManager.Session> unfinishedSessions
-        = UserProgressManager.getUnfinishedSessions(requireContext(), userId);
-
-    // Mark all sessions as finished
-    for (UserProgressManager.Session session : unfinishedSessions) {
-      resetSession(userId, session.getSessionId());
-    }
-
-    // Clear progress in preferences
-    UserProgressManager.clearUserProgress(requireContext(), userId);
-  }
-
   private void resetSession(long userId, String sessionId) {
-    // Mark the session as finished
+
     UserProgressManager.markSessionFinished(requireContext(), userId, sessionId);
 
-    // Delete drawing data for this session from the database
     db.drawingDataDao().deleteUserSessionData(userId, sessionId);
-  }
-
-  /**
-   * Checks for unfinished users during initial load
-   * This is separate from the onResume check to prevent UI jumping
-   */
-  private void checkUnfinishedUsersInitial() {
-    unfinishedUsers = UserProgressManager.getUnfinishedUsers(requireContext(), db);
-
-    // Update UI on the main thread if needed
-    if (!unfinishedUsers.isEmpty()) {
-      requireActivity().runOnUiThread(this::updatePreferencesVisibility);
-    }
-  }
-
-  @Override
-  public void onResume() {
-    super.onResume();
-
-    // Only check for unfinished users if we need to
-    // This prevents UI jumping on each resume
-    executor.execute(() -> {
-      List<UserProgressManager.UserProgress> newUnfinishedUsers
-          = UserProgressManager.getUnfinishedUsers(requireContext(), db);
-
-      // Only update UI if the state has changed
-      boolean wasEmpty = unfinishedUsers.isEmpty();
-      boolean isEmpty = newUnfinishedUsers.isEmpty();
-
-      if (wasEmpty != isEmpty) {
-        unfinishedUsers = newUnfinishedUsers;
-        requireActivity().runOnUiThread(this::updatePreferencesVisibility);
-      }
-    });
   }
 
   /**

@@ -66,7 +66,7 @@ public class ImageSelectionActivity extends BaseActivity {
       new ActivityResultContracts.GetMultipleContents(),
       this::handleMultipleImageSelection
   );
-  // Keep track of initial state to restore if user cancels
+
   private List<Image> initialSelectedImages = new ArrayList<>();
   private View btnAddImage;
   private boolean hasChanges = false;
@@ -88,10 +88,8 @@ public class ImageSelectionActivity extends BaseActivity {
     db = AppDatabase.getInstance(this);
     executor = Executors.newSingleThreadExecutor();
 
-    // Setup back press handling
     setupBackPressHandler();
 
-    // Multi-select mode controls
     multiSelectControls = findViewById(R.id.multiSelectControls);
     Button btnAddToSelection = findViewById(R.id.btnAddToSelection);
     Button btnRemoveSelected = findViewById(R.id.btnRemoveSelected);
@@ -103,7 +101,6 @@ public class ImageSelectionActivity extends BaseActivity {
     btnRemoveSelected.setOnClickListener(v -> showRemoveConfirmationDialog());
     btnExitMultiSelect.setOnClickListener(v -> exitMultiSelectMode());
 
-    // Setup unselected images section
     RecyclerView recyclerViewUnselected = findViewById(R.id.recyclerViewUnselected);
     int spanCount = calculateSpanCount();
     GridLayoutManager layoutManager = new GridLayoutManager(this, spanCount);
@@ -111,10 +108,8 @@ public class ImageSelectionActivity extends BaseActivity {
     recyclerViewUnselected.addItemDecoration(new StableGridSpacingDecoration(getResources().getDimensionPixelSize(
         R.dimen.grid_spacing) / 2));
 
-    // Setup the adapter for unselected images
     setupUnselectedAdapter();
 
-    // Setup selected images section
     textViewSelected = findViewById(R.id.textViewSelected);
     textViewSelectedNumber = findViewById(R.id.textViewSelectedNumber);
     recyclerViewSelected = findViewById(R.id.recyclerViewSelected);
@@ -125,11 +120,9 @@ public class ImageSelectionActivity extends BaseActivity {
     recyclerViewSelected.setAdapter(selectedAdapter);
     selectedAdapter.attachToRecyclerView(recyclerViewSelected);
 
-    // Setup add image button
     btnAddImage = findViewById(R.id.btnAddImage);
     btnAddImage.setOnClickListener(v -> openImagePicker());
 
-    // Load images from database
     loadImages();
   }
 
@@ -146,10 +139,10 @@ public class ImageSelectionActivity extends BaseActivity {
             } else if (hasChanges) {
               showExitConfirmationDialog();
             } else {
-              // Disable this callback to allow the system to handle the back press
+
               this.setEnabled(false);
               getOnBackPressedDispatcher().onBackPressed();
-              // Re-enable the callback for future back presses
+
               this.setEnabled(true);
             }
           }
@@ -160,7 +153,6 @@ public class ImageSelectionActivity extends BaseActivity {
   private void updateSelectAllCheckboxState() {
     if (!isMultiSelectMode) return;
 
-    // For all states, use transparent background with primary color for border and checkmark/minus
     int bgColor = Color.TRANSPARENT;
     int borderColor = getResources().getColor(R.color.primary, getTheme());
     int iconColor = getResources().getColor(R.color.primary, getTheme());
@@ -185,14 +177,9 @@ public class ImageSelectionActivity extends BaseActivity {
     int total = unselectedAdapter.getItemCount();
     int selected = unselectedAdapter.getMultiSelectedImages().size();
 
-    // Set the checkbox drawable programmatically based on selection state
     boolean isAllSelected = (selected > 0 && selected == total);
     boolean isIndeterminate = (selected > 0 && selected < total);
 
-    // Determine checkbox state:
-    // 0 = unchecked (nothing selected)
-    // 1 = checked (all selected)
-    // 2 = indeterminate (some selected) - will show minus sign
     int checkboxState = 0;
     if (isAllSelected) checkboxState = 1;
     else if (isIndeterminate) checkboxState = 2;
@@ -204,10 +191,10 @@ public class ImageSelectionActivity extends BaseActivity {
     int selected = unselectedAdapter.getMultiSelectedImages().size();
 
     if (selected < total) {
-      // Not all selected, so select all
+
       selectAllImages();
     } else {
-      // All selected, so deselect all
+
       deselectAllImages();
     }
   }
@@ -225,36 +212,29 @@ public class ImageSelectionActivity extends BaseActivity {
       unselectedAdapter.toggleImageSelection(image);
     }
 
-    // Update checkbox state after changing selections
     updateSelectAllCheckboxState();
   }
 
   private void handleImageSelection(Image image) {
-    // Step 1: Process the selection
+
     processImageSelectionToggle(image);
 
-    // Step 2: Update unselected list
     updateUnselectedImages();
 
-    // Step 3: Track order changes but don't save to preferences yet
     saveImageOrder();
 
-    // Step 4: Update UI
     updateUIAfterImageSelection();
   }
 
   private void processImageSelectionToggle(Image image) {
-    // Step 1: Get currently selected images from the adapter
+
     List<Image> currentlySelected = getCurrentlySelectedImages();
 
-    // Step 2: Create a completely new list and toggle the selection
     boolean wasSelected = isImageAlreadySelected(image, currentlySelected);
     List<Image> newSelectedList = toggleImageInSelection(image, currentlySelected, wasSelected);
 
-    // Step 3: Officially update the selectedImages variable
     selectedImages = newSelectedList;
 
-    // Step 4: Create a verified adapter list and update the adapter
     updateSelectionAdapter(newSelectedList);
   }
 
@@ -283,14 +263,14 @@ public class ImageSelectionActivity extends BaseActivity {
     List<Image> newSelectedList = new ArrayList<>();
 
     if (wasSelected) {
-      // Remove from selection (add all except the clicked image)
+
       for (Image selected : currentlySelected) {
         if (selected.id != image.id) {
           newSelectedList.add(selected);
         }
       }
     } else {
-      // Add to selection (add all current selections first, then the new one)
+
       newSelectedList.addAll(currentlySelected);
       newSelectedList.add(image);
     }
@@ -309,12 +289,11 @@ public class ImageSelectionActivity extends BaseActivity {
       }
     }
 
-    // Update the adapter with verified list
     selectedAdapter.setImages(adapterImages);
   }
 
   private void updateUIAfterImageSelection() {
-    // Update count immediately for better UX - with parentheses
+
     textViewSelectedNumber.setText(String.format(
         Locale.getDefault(),
         getString(R.string.selected_count_format),
@@ -324,36 +303,50 @@ public class ImageSelectionActivity extends BaseActivity {
     updateSelectedSectionVisibility();
   }
 
+  private void saveImageOrder() {
+
+    List<Image> currentOrderedImages = selectedAdapter.getImages();
+    if (!currentOrderedImages.isEmpty()) {
+
+      selectedImages = new ArrayList<>();
+      selectedImages.addAll(currentOrderedImages);
+    }
+
+    hasChanges = true;
+  }
+
+  private void validateImageName(String name, TextInputLayout textInputLayout) {
+    if (name.trim().isEmpty()) {
+      textInputLayout.setError(ERROR_NAME_EMPTY);
+      textInputLayout.setErrorEnabled(true);
+    }
+  }
+
   private void showImageOptionsDialog(Image image) {
-    // Create a proper parent ViewGroup for layout parameters to work correctly
+
     FrameLayout parentContainer = new FrameLayout(this);
     parentContainer.setLayoutParams(new FrameLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT,
                                                                  ViewGroup.LayoutParams.WRAP_CONTENT
     ));
 
-    // Inflate the view with proper parent
     View dialogView = LayoutInflater
         .from(this)
         .inflate(R.layout.dialog_image_options, parentContainer, false);
 
-    // Setup dialog components
     DialogComponents components = setupDialogComponents(dialogView, image);
 
-    // Load image into preview
     loadImagePreview(image, components.imagePreview);
 
-    // Create and show dialog
     AlertDialog dialog = createImageOptionsDialog(dialogView);
 
-    // Setup button click listeners
     setupDialogButtonListeners(dialog, image, components);
 
     dialog.show();
   }
 
   private DialogComponents setupDialogComponents(View dialogView, Image image) {
-    // Find views
+
     ImageView imagePreview = dialogView.findViewById(R.id.image_preview);
     EditText editImageName = dialogView.findViewById(R.id.editImageName);
     Button btnDeleteImage = dialogView.findViewById(R.id.btnDeleteImage);
@@ -361,22 +354,16 @@ public class ImageSelectionActivity extends BaseActivity {
     Button btnSave = dialogView.findViewById(R.id.btnSave);
     TextInputLayout textInputLayout = (TextInputLayout) editImageName.getParent().getParent();
 
-    // Set current image name
     editImageName.setText(image.name);
 
-    // Initial validation check
     validateImageName(image.name, textInputLayout);
 
-    // Add text change listener to validate input in real-time
     setupImageNameValidator(editImageName, textInputLayout);
 
-    // Apply checkerboard pattern background for transparency
     setupCheckerboardBackground(imagePreview);
 
-    // Hide delete button for default images
     btnDeleteImage.setVisibility(image.source.equals(SOURCE_DEFAULT) ? View.GONE : View.VISIBLE);
 
-    // Use error color from theme for delete button
     btnDeleteImage.setTextColor(getResources().getColor(R.color.error, getTheme()));
 
     return new DialogComponents(
@@ -389,16 +376,16 @@ public class ImageSelectionActivity extends BaseActivity {
     );
   }
 
-  private void validateImageName(String name, TextInputLayout textInputLayout) {
-    if (name.trim().isEmpty()) {
-      textInputLayout.setError(ERROR_NAME_EMPTY);
-      textInputLayout.setErrorEnabled(true);
-    }
+  private AlertDialog createImageOptionsDialog(View dialogView) {
+    return new AlertDialog.Builder(this)
+        .setTitle(Constants.DIALOG_TITLE_IMAGE_OPTIONS)
+        .setView(dialogView)
+        .create();
   }
 
   private void setupCheckerboardBackground(ImageView imagePreview) {
-    int lightColor = Color.rgb(238, 238, 238); // #EEEEEE
-    int darkColor = Color.rgb(204, 204, 204);  // #CCCCCC
+    int lightColor = Color.rgb(238, 238, 238);
+    int darkColor = Color.rgb(204, 204, 204);
     CheckerboardDrawable checkerboardDrawable = new CheckerboardDrawable(lightColor, darkColor, 16);
     imagePreview.setBackground(checkerboardDrawable);
   }
@@ -407,19 +394,19 @@ public class ImageSelectionActivity extends BaseActivity {
     editImageName.addTextChangedListener(new TextWatcher() {
       @Override
       public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-        // Not used
+        throw new UnsupportedOperationException("Not implemented");
       }
 
       @Override
       public void onTextChanged(CharSequence s, int start, int before, int count) {
-        // Check if text is empty after trimming whitespace
+
         String text = s.toString().trim();
         if (text.isEmpty()) {
-          // Show error immediately when field becomes empty
+
           textInputLayout.setError(ERROR_NAME_EMPTY);
           textInputLayout.setErrorEnabled(true);
         } else {
-          // Clear error when there is valid input
+
           textInputLayout.setError(null);
           textInputLayout.setErrorEnabled(false);
         }
@@ -427,51 +414,9 @@ public class ImageSelectionActivity extends BaseActivity {
 
       @Override
       public void afterTextChanged(Editable s) {
-        // Not used
+        // No action needed
       }
     });
-  }
-
-  private AlertDialog createImageOptionsDialog(View dialogView) {
-    return new AlertDialog.Builder(this)
-        .setTitle(Constants.DIALOG_TITLE_IMAGE_OPTIONS)
-        .setView(dialogView)
-        .create();
-  }
-
-  private void setupDialogButtonListeners(
-      AlertDialog dialog,
-      Image image,
-      DialogComponents components
-  ) {
-    // Cancel button listener
-    components.btnCancel.setOnClickListener(v -> dialog.dismiss());
-
-    // Save button listener
-    components.btnSave.setOnClickListener(v -> handleSaveButtonClick(dialog, image, components));
-
-    // Delete button listener
-    components.btnDeleteImage.setOnClickListener(v -> {
-      dialog.dismiss();
-      deleteImage(image);
-    });
-  }
-
-  private void handleSaveButtonClick(AlertDialog dialog, Image image, DialogComponents components) {
-    String newName = components.editImageName.getText().toString().trim();
-    if (newName.isEmpty()) {
-      // Show error on the TextInputLayout for empty name
-      components.textInputLayout.setError(ERROR_NAME_EMPTY);
-      components.textInputLayout.setErrorEnabled(true);
-      return; // Don't proceed
-    }
-
-    // Check if name is different from original
-    if (!newName.equals(image.name)) {
-      // Only rename if the name has actually changed
-      renameImage(image, newName);
-    }
-    dialog.dismiss();
   }
 
   private void loadImagePreview(Image image, ImageView imagePreview) {
@@ -482,38 +427,74 @@ public class ImageSelectionActivity extends BaseActivity {
     }
   }
 
+  private void setupDialogButtonListeners(
+      AlertDialog dialog,
+      Image image,
+      DialogComponents components
+  ) {
+
+    components.btnCancel.setOnClickListener(v -> dialog.dismiss());
+
+    components.btnSave.setOnClickListener(v -> handleSaveButtonClick(dialog, image, components));
+
+    components.btnDeleteImage.setOnClickListener(v -> {
+      dialog.dismiss();
+      deleteImage(image);
+    });
+  }
+
+  private void handleSaveButtonClick(AlertDialog dialog, Image image, DialogComponents components) {
+    String newName = components.editImageName.getText().toString().trim();
+    if (newName.isEmpty()) {
+
+      components.textInputLayout.setError(ERROR_NAME_EMPTY);
+      components.textInputLayout.setErrorEnabled(true);
+      return;
+    }
+
+    if (!newName.equals(image.name)) {
+
+      renameImage(image, newName);
+    }
+    dialog.dismiss();
+  }
+
+  private void loadImages() {
+    executor.execute(() -> {
+      db.imageDao().deleteInvalidCustomImages();
+
+      List<Image> fetchedImages = fetchAllImages();
+      processLoadedImages(fetchedImages);
+    });
+  }
+
   private void loadDefaultImage(Image image, ImageView imagePreview) {
-    // Use ResourceUtils with non-deprecated method
+
     int resourceId = ResourceUtils.getDrawableResourceByName(image.name);
 
-    // If not found by name, try to use the path which should contain the resource ID
     if (resourceId == 0 && !TextUtils.isEmpty(image.path)) {
       try {
         resourceId = Integer.parseInt(image.path);
-      } catch (NumberFormatException e) {
-        // Path is not a valid resource ID
+      } catch (NumberFormatException ignored) {
+        // Ignore the exception
       }
     }
 
     if (resourceId != 0) {
-      // Use a request with centerInside to keep aspect ratio and show checkerboard behind
-      // transparent areas
-      Glide.with(this).load(resourceId).fitCenter() // Fit within bounds keeping aspect ratio
-           .into(imagePreview);
+
+      Glide.with(this).load(resourceId).fitCenter().into(imagePreview);
     } else {
       Toast.makeText(this, Constants.TOAST_FAILED_LOAD_DEFAULT, Toast.LENGTH_SHORT).show();
     }
   }
 
   private void loadCustomImage(Image image, ImageView imagePreview) {
-    // Load custom image from URI
+
     Uri uri = Uri.parse(image.path);
     try {
       getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-      // Use a request with centerInside to keep aspect ratio and show checkerboard behind
-      // transparent areas
-      Glide.with(this).load(uri).fitCenter() // Fit within bounds keeping aspect ratio
-           .into(imagePreview);
+
+      Glide.with(this).load(uri).fitCenter().into(imagePreview);
     } catch (Exception e) {
       Toast
           .makeText(this, Constants.TOAST_FAILED_LOAD_IMAGE + e.getMessage(), Toast.LENGTH_SHORT)
@@ -521,18 +502,8 @@ public class ImageSelectionActivity extends BaseActivity {
     }
   }
 
-  private void loadImages() {
-    executor.execute(() -> {
-      db.imageDao().deleteInvalidCustomImages();
-
-      // Load images and apply changes on the UI thread
-      List<Image> fetchedImages = fetchAllImages();
-      processLoadedImages(fetchedImages);
-    });
-  }
-
   private List<Image> fetchAllImages() {
-    // First fetch all images from database
+
     List<Image> fetchedImages = new ArrayList<>();
     fetchedImages.addAll(db.imageDao().getImagesBySource(SOURCE_DEFAULT));
     fetchedImages.addAll(db.imageDao().getImagesBySource(SOURCE_CUSTOM));
@@ -540,50 +511,15 @@ public class ImageSelectionActivity extends BaseActivity {
   }
 
   private void processLoadedImages(List<Image> fetchedImages) {
-    // Update allImages list
+
     allImages.clear();
     allImages.addAll(fetchedImages);
 
-    // Handle selected images
     processSelectedImages();
 
-    // Save initial state for possible restoration if user cancels
     initialSelectedImages = new ArrayList<>(selectedImages);
 
     updateUIAfterLoading();
-  }
-
-  private void processSelectedImages() {
-    // Load selected images from preferences if empty
-    if (selectedImages.isEmpty()) {
-      loadSelectionsFromPreferences();
-    } else {
-      filterSelectedImagesAgainstDatabase();
-    }
-  }
-
-  private void filterSelectedImagesAgainstDatabase() {
-    // Filter out deleted images from selected images
-    List<Image> validSelectedImages = new ArrayList<>();
-
-    for (Image selectedImage : selectedImages) {
-      boolean imageStillExists = isImageInDatabase(selectedImage.id);
-      if (imageStillExists) {
-        // Find and use the fresh copy from database
-        for (Image image : allImages) {
-          if (image.id == selectedImage.id) {
-            validSelectedImages.add(image);
-            break;
-          }
-        }
-      } else {
-        // Image was deleted, skip it
-        hasChanges = true;
-      }
-    }
-
-    selectedImages.clear();
-    selectedImages.addAll(validSelectedImages);
   }
 
   private boolean isImageInDatabase(int imageId) {
@@ -595,30 +531,43 @@ public class ImageSelectionActivity extends BaseActivity {
     return false;
   }
 
-  private void updateUIAfterLoading() {
-    runOnUiThread(() -> {
-      // Update count immediately after loading - with parentheses
-      textViewSelectedNumber.setText(String.format(
-          Locale.getDefault(),
-          getString(R.string.selected_count_format),
-          selectedImages.size()
-      ));
+  private void processSelectedImages() {
 
-      // Make sure to use a new copy of the list for the adapter
-      selectedAdapter.setImages(new ArrayList<>(selectedImages));
+    if (selectedImages.isEmpty()) {
+      loadSelectionsFromPreferences();
+    } else {
+      filterSelectedImagesAgainstDatabase();
+    }
+  }
 
-      updateUnselectedImages();
-      updateSelectedSectionVisibility();
-      // Initial update of multi-select controls visibility
-      updateMultiSelectControlsVisibility();
-    });
+  private void filterSelectedImagesAgainstDatabase() {
+
+    List<Image> validSelectedImages = new ArrayList<>();
+
+    for (Image selectedImage : selectedImages) {
+      boolean imageStillExists = isImageInDatabase(selectedImage.id);
+      if (imageStillExists) {
+
+        for (Image image : allImages) {
+          if (image.id == selectedImage.id) {
+            validSelectedImages.add(image);
+            break;
+          }
+        }
+      } else {
+
+        hasChanges = true;
+      }
+    }
+
+    selectedImages.clear();
+    selectedImages.addAll(validSelectedImages);
   }
 
   private void loadSelectionsFromPreferences() {
-    // Load selected image IDs from preferences
+
     Set<Integer> selectedImageIds = SelectedImagesManager.getSelectedImages(this);
 
-    // Also load the saved image order
     List<Integer> savedOrderIds = loadImageOrderFromPreferences();
 
     if (!savedOrderIds.isEmpty()) {
@@ -627,16 +576,7 @@ public class ImageSelectionActivity extends BaseActivity {
       loadImagesWithoutOrder(selectedImageIds);
     }
 
-    // Save initial state for possible restoration if user cancels
     initialSelectedImages = new ArrayList<>(selectedImages);
-  }
-
-  private void loadImagesInSavedOrder(Set<Integer> selectedImageIds, List<Integer> savedOrderIds) {
-    // First add images in the saved order
-    addImagesFromSavedOrder(selectedImageIds, savedOrderIds);
-
-    // Then add any selected images not in the saved order
-    addRemainingSelectedImages(selectedImageIds, savedOrderIds);
   }
 
   private void addImagesFromSavedOrder(Set<Integer> selectedImageIds, List<Integer> savedOrderIds) {
@@ -658,13 +598,11 @@ public class ImageSelectionActivity extends BaseActivity {
     }
   }
 
-  private void loadImagesWithoutOrder(Set<Integer> selectedImageIds) {
-    // No saved order, just add all selected images
-    for (Image image : allImages) {
-      if (selectedImageIds.contains(image.id)) {
-        selectedImages.add(image);
-      }
-    }
+  private void loadImagesInSavedOrder(Set<Integer> selectedImageIds, List<Integer> savedOrderIds) {
+
+    addImagesFromSavedOrder(selectedImageIds, savedOrderIds);
+
+    addRemainingSelectedImages(selectedImageIds, savedOrderIds);
   }
 
   private void addImageWithIdToSelected(int id) {
@@ -676,26 +614,13 @@ public class ImageSelectionActivity extends BaseActivity {
     }
   }
 
-  private List<Integer> loadImageOrderFromPreferences() {
-    List<Integer> result = new ArrayList<>();
-    SharedPreferences prefs = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
-    String json = prefs.getString(PREF_IMAGE_ORDER, null);
+  private void loadImagesWithoutOrder(Set<Integer> selectedImageIds) {
 
-    if (json != null) {
-      try {
-        Gson gson = new Gson();
-        java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<List<Integer>>() {
-        }.getType();
-        List<Integer> loadedIds = gson.fromJson(json, type);
-        if (loadedIds != null) {
-          result.addAll(loadedIds);
-        }
-      } catch (Exception e) {
-        // Error parsing JSON, return empty list
+    for (Image image : allImages) {
+      if (selectedImageIds.contains(image.id)) {
+        selectedImages.add(image);
       }
     }
-
-    return result;
   }
 
   private void showRemoveConfirmationDialog() {
@@ -729,6 +654,62 @@ public class ImageSelectionActivity extends BaseActivity {
     builder.show();
   }
 
+  private List<Integer> loadImageOrderFromPreferences() {
+    List<Integer> result = new ArrayList<>();
+    SharedPreferences prefs = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
+    String json = prefs.getString(PREF_IMAGE_ORDER, null);
+
+    if (json != null) {
+      try {
+        Gson gson = new Gson();
+        java.lang.reflect.Type type = new com.google.gson.reflect.TypeToken<List<Integer>>() {
+        }.getType();
+        List<Integer> loadedIds = gson.fromJson(json, type);
+        if (loadedIds != null) {
+          result.addAll(loadedIds);
+        }
+      } catch (Exception ignored) {
+        // Ignore the exception
+      }
+    }
+
+    return result;
+  }
+
+  @Override
+  public boolean onSupportNavigateUp() {
+    if (isMultiSelectMode) {
+      exitMultiSelectMode();
+      return false;
+    }
+
+    if (hasChanges) {
+      showExitConfirmationDialog();
+      return false;
+    }
+
+    finish();
+    return true;
+  }
+
+  private void updateUIAfterLoading() {
+    runOnUiThread(() -> {
+
+      textViewSelectedNumber.setText(String.format(
+          Locale.getDefault(),
+          getString(R.string.selected_count_format),
+          selectedImages.size()
+      ));
+
+      selectedAdapter.setImages(new ArrayList<>(selectedImages));
+
+      updateUnselectedImages();
+      updateSelectedSectionVisibility();
+
+      updateMultiSelectControlsVisibility();
+    });
+  }
+
   private void removeSelectedImages() {
     Set<Image> selectedForRemoval = unselectedAdapter.getMultiSelectedImages();
     List<Image> customImagesToRemove = selectedForRemoval
@@ -755,26 +736,10 @@ public class ImageSelectionActivity extends BaseActivity {
         }
       });
     } else if (!selectedForRemoval.isEmpty()) {
-      // Only default images were selected
+
       Toast.makeText(this, Constants.TOAST_DEFAULT_NOT_REMOVED, Toast.LENGTH_SHORT).show();
       exitMultiSelectMode();
     }
-  }
-
-  @Override
-  public boolean onSupportNavigateUp() {
-    if (isMultiSelectMode) {
-      exitMultiSelectMode();
-      return false;
-    }
-
-    if (hasChanges) {
-      showExitConfirmationDialog();
-      return false;
-    }
-
-    finish();
-    return true;
   }
 
   private void showExitConfirmationDialog() {
@@ -784,10 +749,10 @@ public class ImageSelectionActivity extends BaseActivity {
         .setPositiveButton(Constants.SAVE_AND_EXIT_BUTTON, (dialog, which) -> saveAndExit())
         .setNegativeButton(
             Constants.EXIT_WITHOUT_SAVING_BUTTON, (dialog, which) -> {
-              // Restore the original state before exiting
+
               selectedImages = new ArrayList<>(initialSelectedImages);
               hasChanges = false;
-              // Important: Don't call any methods that might save to preferences here
+
               finish();
             }
         )
@@ -796,10 +761,9 @@ public class ImageSelectionActivity extends BaseActivity {
   }
 
   private void saveAndExit() {
-    // Call our method that now correctly syncs and saves
+
     saveSelectedImages();
 
-    // Create result intent with selected image IDs
     Intent resultIntent = new Intent();
     resultIntent.putExtra(
         "selected_image_ids",
@@ -807,43 +771,6 @@ public class ImageSelectionActivity extends BaseActivity {
     );
     setResult(RESULT_OK, resultIntent);
     finish();
-  }
-
-  private void saveImageOrder() {
-    // Get the current ordered list from the adapter
-    List<Image> currentOrderedImages = selectedAdapter.getImages();
-    if (!currentOrderedImages.isEmpty()) {
-      // Create a completely new list to avoid reference issues
-      selectedImages = new ArrayList<>();
-      selectedImages.addAll(currentOrderedImages);
-    }
-
-    // Mark as changed but DON'T save to preferences
-    hasChanges = true;
-  }
-
-  private void addSelectedImagesToSelection() {
-    // Get the IDs of all selected images
-    List<Integer> selectedImageIds = unselectedAdapter.getSelectedImageIds();
-
-    if (selectedImageIds.isEmpty()) {
-      Toast.makeText(this, Constants.TOAST_NO_IMAGES_SELECTED_ADD, Toast.LENGTH_SHORT).show();
-      return;
-    }
-
-    hasChanges = true;
-
-    // Process the selected images
-    List<Image> currentlySelected = getCurrentlySelectedImages();
-    List<Image> imagesToAdd = findImagesToAdd(selectedImageIds, currentlySelected);
-    List<Image> newCombinedList = combineImageLists(currentlySelected, imagesToAdd);
-
-    // Update the adapter and UI
-    updateSelectionWithNewList(newCombinedList);
-    updateUiAfterSelectionChange();
-
-    // Exit multi-select mode
-    exitMultiSelectMode();
   }
 
   private List<Image> findImagesToAdd(
@@ -870,11 +797,31 @@ public class ImageSelectionActivity extends BaseActivity {
     return combinedList;
   }
 
+  private void addSelectedImagesToSelection() {
+
+    List<Integer> selectedImageIds = unselectedAdapter.getSelectedImageIds();
+
+    if (selectedImageIds.isEmpty()) {
+      Toast.makeText(this, Constants.TOAST_NO_IMAGES_SELECTED_ADD, Toast.LENGTH_SHORT).show();
+      return;
+    }
+
+    hasChanges = true;
+
+    List<Image> currentlySelected = getCurrentlySelectedImages();
+    List<Image> imagesToAdd = findImagesToAdd(selectedImageIds, currentlySelected);
+    List<Image> newCombinedList = combineImageLists(currentlySelected, imagesToAdd);
+
+    updateSelectionWithNewList(newCombinedList);
+    updateUiAfterSelectionChange();
+
+    exitMultiSelectMode();
+  }
+
   private void updateSelectionWithNewList(List<Image> newSelectedList) {
-    // Update the main selection list
+
     selectedImages = newSelectedList;
 
-    // Create a verified adapter list
     List<Image> adapterImages = new ArrayList<>();
     for (Image img : newSelectedList) {
       if (img != null) {
@@ -882,26 +829,7 @@ public class ImageSelectionActivity extends BaseActivity {
       }
     }
 
-    // Update the adapter
     selectedAdapter.setImages(adapterImages);
-  }
-
-  private void updateUiAfterSelectionChange() {
-    // Update count display
-    textViewSelectedNumber.setText(String.format(
-        Locale.getDefault(),
-        getString(R.string.selected_count_format),
-        selectedImages.size()
-    ));
-
-    // Save the order
-    saveImageOrder();
-
-    // Update the unselected images list
-    updateUnselectedImages();
-
-    // Update UI visibility
-    updateSelectedSectionVisibility();
   }
 
   private void updateSelectedSectionVisibility() {
@@ -910,7 +838,6 @@ public class ImageSelectionActivity extends BaseActivity {
     textViewSelected.setVisibility(View.VISIBLE);
     recyclerViewSelected.setVisibility(hasSelectedImages ? View.VISIBLE : View.GONE);
 
-    // Update the selected count text - always in parentheses
     if (hasSelectedImages) {
       textViewSelectedNumber.setText(String.format(
           Locale.getDefault(),
@@ -957,7 +884,7 @@ public class ImageSelectionActivity extends BaseActivity {
       exitMultiSelectMode();
       return true;
     } else if (item.getItemId() == android.R.id.home) {
-      // Use the dispatcher instead of calling onBackPressed directly
+
       getOnBackPressedDispatcher().onBackPressed();
       return true;
     } else if (item.getItemId() == R.id.action_done) {
@@ -973,17 +900,16 @@ public class ImageSelectionActivity extends BaseActivity {
 
   @Override
   public void finish() {
-    // Ensure the original state is maintained if we didn't explicitly save
+
     if (hasChanges) {
-      // Restore original state (this won't be seen by the user since we're finishing)
+
       selectedImages = initialSelectedImages;
     }
     super.finish();
   }
 
-  // Save selected images without exiting
   private void saveSelectedImages() {
-    // First sync with the adapter's current order
+
     List<Image> currentOrderedImages = selectedAdapter.getImages();
     if (currentOrderedImages != null && !currentOrderedImages.isEmpty()) {
       selectedImages = new ArrayList<>(currentOrderedImages);
@@ -995,22 +921,17 @@ public class ImageSelectionActivity extends BaseActivity {
       selectedImageIds.add(image.id);
     }
 
-    // Save which images are selected
     SelectedImagesManager.saveSelectedImages(this, selectedImageIds);
 
-    // Save the order of selected images using the dedicated method
     persistImageOrder();
 
-    // Reset the changes flag
     hasChanges = false;
 
-    // Show confirmation toast
     Toast.makeText(this, Constants.TOAST_SELECTION_SAVED, Toast.LENGTH_SHORT).show();
   }
 
-  // Only called when explicitly saving
   private void persistImageOrder() {
-    // Save the selected images order to preferences
+
     List<Integer> imageIds = new ArrayList<>();
     for (Image image : selectedImages) {
       imageIds.add(image.id);
@@ -1038,16 +959,31 @@ public class ImageSelectionActivity extends BaseActivity {
     }
   }
 
+  private void updateUiAfterSelectionChange() {
+
+    textViewSelectedNumber.setText(String.format(
+        Locale.getDefault(),
+        getString(R.string.selected_count_format),
+        selectedImages.size()
+    ));
+
+    saveImageOrder();
+
+    updateUnselectedImages();
+
+    updateSelectedSectionVisibility();
+  }
+
   private void openImagePicker() {
-    // Launch the image picker with support for multiple images
+
     pickImageLauncher.launch("image/*");
     Toast.makeText(this, Constants.TOAST_MULTI_SELECT_HINT, Toast.LENGTH_SHORT).show();
   }
 
   private void handleMultipleImageSelection(List<Uri> imageUris) {
-    // Handle case when user cancels selection or doesn't select any images
+
     if (imageUris == null || imageUris.isEmpty()) {
-      return; // Just return silently, no need for toast message on cancellation
+      return;
     }
 
     final int imageCount = imageUris.size();
@@ -1059,37 +995,16 @@ public class ImageSelectionActivity extends BaseActivity {
 
     executor.execute(() -> {
       try {
-        // Process each image
+
         for (Uri imageUri : imageUris) {
           processImageUri(imageUri, newImages);
         }
 
-        // Update UI after all images are processed
         updateUIAfterImageProcessing(imageCount, newImages);
       } catch (Exception e) {
         showImageSaveError(e);
       }
     });
-  }
-
-  private void processImageUri(Uri imageUri, List<Image> newImages) {
-    String fileName = "Custom_" + System.currentTimeMillis();
-    Image newImage = new Image(fileName, SOURCE_CUSTOM, imageUri.toString());
-
-    // Take persistent read permissions on the URI
-    try {
-      getContentResolver().takePersistableUriPermission(
-          imageUri,
-          Intent.FLAG_GRANT_READ_URI_PERMISSION
-      );
-    } catch (SecurityException e) {
-      // Continue even if we can't get persistent permissions
-    }
-
-    // Insert the image into the database
-    long id = db.imageDao().insertImage(newImage);
-    newImage.id = (int) id;
-    newImages.add(newImage);
   }
 
   private void updateUIAfterImageProcessing(int imageCount, List<Image> newImages) {
@@ -1100,27 +1015,15 @@ public class ImageSelectionActivity extends BaseActivity {
     });
   }
 
-  private void showImagesAddedToast(int imageCount) {
-    Toast.makeText(
-        this,
-        imageCount > 1
-        ? imageCount + " " + Constants.TOAST_IMAGES_ADDED
-        : Constants.TOAST_IMAGES_ADDED,
-        Toast.LENGTH_SHORT
-    ).show();
-  }
-
   private void updateUnselectedImages() {
-    // Create a completely new list to avoid any reference issues
+
     List<Image> unselected = new ArrayList<>();
 
-    // Get the currently selected images directly from the adapter
     List<Image> currentlySelected = new ArrayList<>();
     if (selectedAdapter != null && selectedAdapter.getImages() != null) {
       currentlySelected.addAll(selectedAdapter.getImages());
     }
 
-    // Add all images that aren't in the selected list
     for (Image image : allImages) {
       boolean isSelected = false;
       for (Image selected : currentlySelected) {
@@ -1135,8 +1038,35 @@ public class ImageSelectionActivity extends BaseActivity {
       }
     }
 
-    // Update the adapter with the new list
     unselectedAdapter.updateImages(unselected);
+  }
+
+  private void showImagesAddedToast(int imageCount) {
+    Toast.makeText(
+        this,
+        imageCount > 1
+        ? imageCount + " " + Constants.TOAST_IMAGES_ADDED
+        : Constants.TOAST_IMAGES_ADDED,
+        Toast.LENGTH_SHORT
+    ).show();
+  }
+
+  private void processImageUri(Uri imageUri, List<Image> newImages) {
+    String fileName = "Custom_" + System.currentTimeMillis();
+    Image newImage = new Image(fileName, SOURCE_CUSTOM, imageUri.toString());
+
+    try {
+      getContentResolver().takePersistableUriPermission(
+          imageUri,
+          Intent.FLAG_GRANT_READ_URI_PERMISSION
+      );
+    } catch (SecurityException ignored) {
+      // Ignore the exception
+    }
+
+    long id = db.imageDao().insertImage(newImage);
+    newImage.id = (int) id;
+    newImages.add(newImage);
   }
 
   private void showImageSaveError(Exception e) {
@@ -1163,7 +1093,7 @@ public class ImageSelectionActivity extends BaseActivity {
 
   private boolean handleImageLongClick(Image image) {
     if (!isMultiSelectMode) {
-      // Start multi-select mode
+
       isMultiSelectMode = true;
       unselectedAdapter.setMultiSelectMode(true);
       unselectedAdapter.toggleImageSelection(image);
@@ -1183,19 +1113,18 @@ public class ImageSelectionActivity extends BaseActivity {
    * Calculate number of columns for the grid based on screen width
    */
   private int calculateSpanCount() {
-    // Get the screen width
+
     int screenWidth = getResources().getDisplayMetrics().widthPixels;
-    // Target width for each item in dp
-    int idealItemWidth = 100; // dp
-    // Convert dp to pixels
+
+    int idealItemWidth = 100;
+
     float density = getResources().getDisplayMetrics().density;
     int itemWidthInPixels = (int) (idealItemWidth * density);
-    // Calculate span count
+
     int spanCount = Math.max(2, screenWidth / itemWidthInPixels);
-    return Math.min(spanCount, 4); // Cap at 4 columns
+    return Math.min(spanCount, 4);
   }
 
-  // Make the ImageAdapter notify our activity when selections change
   private void setupUnselectedAdapter() {
     unselectedAdapter = new ImageAdapter(
         new ArrayList<>(),

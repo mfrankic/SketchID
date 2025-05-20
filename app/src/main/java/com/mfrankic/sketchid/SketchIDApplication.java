@@ -11,7 +11,6 @@ public class SketchIDApplication extends Application {
   public void onCreate() {
     super.onCreate();
 
-    // Initialize ResourceUtils
     ResourceUtils.initialize();
   }
 } 
