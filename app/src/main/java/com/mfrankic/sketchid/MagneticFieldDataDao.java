@@ -13,18 +13,6 @@ public interface MagneticFieldDataDao {
   @Insert
   void insertAll(List<MagneticFieldData> magneticFieldDataList);
 
-  @Query("SELECT * FROM magnetic_field_data WHERE user_id = :userId AND session_id = :sessionId")
-  List<MagneticFieldData> getMagneticFieldDataByUserAndSession(int userId, String sessionId);
-
-  @Query("DELETE FROM magnetic_field_data WHERE user_id = :userId AND session_id = :sessionId")
-  void deleteMagneticFieldDataByUserAndSession(int userId, String sessionId);
-
-  @Query("DELETE FROM magnetic_field_data WHERE user_id = :userId")
-  void deleteMagneticFieldDataByUser(int userId);
-
-  @Query("DELETE FROM magnetic_field_data")
-  void deleteAllMagneticFieldData();
-
   @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
   @Query(
       "SELECT\n"

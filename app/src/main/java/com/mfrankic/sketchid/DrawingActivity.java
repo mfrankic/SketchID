@@ -19,11 +19,13 @@ import static com.mfrankic.sketchid.Constants.TOAST_INVALID_USER;
 import static com.mfrankic.sketchid.Constants.TOAST_NO_DRAWING;
 import static com.mfrankic.sketchid.Constants.TOAST_NO_IMAGES_SETTINGS;
 import static com.mfrankic.sketchid.Constants.YES_BUTTON;
+import static com.mfrankic.sketchid.SensorDataManager.BASELINE_TARGET_SAMPLE_COUNT;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
@@ -67,6 +69,9 @@ public class DrawingActivity extends BaseActivity {
   private Button nextImageButton;
   private SensorDataManager sensorDataManager;
 
+  private View baselineOverlay;
+  private TextView baselineStatusText;
+
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
@@ -106,6 +111,10 @@ public class DrawingActivity extends BaseActivity {
   protected void onPause() {
     super.onPause();
     saveProgress();
+
+    if (baselineOverlay != null && baselineOverlay.getVisibility() == View.VISIBLE) {
+      hideBaselineOverlay();
+    }
   }
 
   @Override
@@ -149,6 +158,15 @@ public class DrawingActivity extends BaseActivity {
           currentItemIndex,
           currentItemAttempt
       );
+    }
+  }
+
+  private void hideBaselineOverlay() {
+    if (baselineOverlay != null && baselineStatusText != null) {
+      baselineOverlay.setVisibility(View.GONE);
+      baselineStatusText.setVisibility(View.GONE);
+
+      Log.d("DrawingActivity", "Baseline overlay hidden - interactions restored");
     }
   }
 
@@ -222,6 +240,40 @@ public class DrawingActivity extends BaseActivity {
     drawingView = findViewById(R.id.drawing_view);
     drawingViewParams = (ViewGroup.MarginLayoutParams) drawingView.getLayoutParams();
     nextImageButton = findViewById(R.id.btn_next_image);
+
+    setupBaselineOverlay();
+  }
+
+  private void setupBaselineOverlay() {
+    baselineOverlay = new View(this);
+    baselineOverlay.setBackgroundColor(0x80000000); // Semi-transparent black
+    baselineOverlay.setClickable(true);
+    baselineOverlay.setFocusable(true);
+    baselineOverlay.setVisibility(View.GONE);
+
+    baselineStatusText = new TextView(this);
+    baselineStatusText.setText(R.string.baseline_collecting_simple);
+    baselineStatusText.setTextColor(0xFFFFFFFF);
+    baselineStatusText.setTextSize(18);
+    baselineStatusText.setGravity(android.view.Gravity.CENTER);
+    baselineStatusText.setVisibility(View.GONE);
+
+    ViewGroup rootView = findViewById(android.R.id.content);
+
+    FrameLayout.LayoutParams overlayParams
+        = new FrameLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+                                       ViewGroup.LayoutParams.MATCH_PARENT
+    );
+    rootView.addView(baselineOverlay, overlayParams);
+
+    FrameLayout.LayoutParams textParams
+        = new FrameLayout.LayoutParams(
+        ViewGroup.LayoutParams.WRAP_CONTENT,
+                                       ViewGroup.LayoutParams.WRAP_CONTENT
+    );
+    textParams.gravity = android.view.Gravity.CENTER;
+    rootView.addView(baselineStatusText, textParams);
   }
 
   private void setupButtonListeners() {
@@ -318,57 +370,47 @@ public class DrawingActivity extends BaseActivity {
       int imageID = (currentItemType == Item.Type.IMAGE) ? currentItemID : -1;
 
       if (currentItemID != -1 && drawingDataList.isEmpty()) {
-        createDrawingDataPoint(
-            timestamp,
-            x,
-            y,
-            ACTION_START,
-            imageID,
-            currentItemType,
-            size,
-            pressure,
-            orientation
-        );
+        createDrawingDataPoint(new DrawingPointParams.Builder()
+                                   .time(timestamp)
+                                   .x(x)
+                                   .y(y)
+                                   .action(ACTION_START)
+                                   .imageID(imageID)
+                                   .itemType(currentItemType)
+                                   .size(size)
+                                   .pressure(pressure)
+                                   .orientation(orientation)
+                                   .build());
       }
 
-      createDrawingDataPoint(
-          timestamp,
-          x,
-          y,
-          action,
-          imageID,
-          currentItemType,
-          size,
-          pressure,
-          orientation
-      );
+      createDrawingDataPoint(new DrawingPointParams.Builder()
+                                 .time(timestamp)
+                                 .x(x)
+                                 .y(y)
+                                 .action(action)
+                                 .imageID(imageID)
+                                 .itemType(currentItemType)
+                                 .size(size)
+                                 .pressure(pressure)
+                                 .orientation(orientation)
+                                 .build());
     });
   }
 
-  private void createDrawingDataPoint(
-      long time,
-      float x,
-      float y,
-      String action,
-      int imageID,
-      Item.Type itemType,
-      float size,
-      float pressure,
-      float orientation
-  ) {
+  private void createDrawingDataPoint(DrawingPointParams params) {
     drawingDataList.add(new DrawingData.Builder()
-                            .time(time)
-                            .x(x)
-                            .y(y)
-                            .action(action)
+                            .time(params.time)
+                            .x(params.x)
+                            .y(params.y)
+                            .action(params.action)
                             .userID(selectedUserID)
-                            .imageID(imageID)
-                            .itemType(itemType)
+                            .imageID(params.imageID)
+                            .itemType(params.itemType)
                             .attempt(currentItemAttempt)
                             .sessionID(sessionId)
-                            .size(size)
-                            .pressure(pressure)
-                            .orientation(orientation)
+                            .size(params.size)
+                            .pressure(params.pressure)
+                            .orientation(params.orientation)
                             .build());
   }
 
@@ -469,7 +511,53 @@ public class DrawingActivity extends BaseActivity {
     if (currentItem.getType() == Item.Type.IMAGE) {
       displayImageItem(currentItem);
       int imageId = currentItem.getId();
-      sensorDataManager.startCollecting(selectedUserID, imageId, sessionId, currentItemAttempt);
+
+      showBaselineOverlay();
+
+      sensorDataManager.startBaselineCollection(
+          selectedUserID, imageId, sessionId, currentItemAttempt, success -> runOnUiThread(() -> {
+            hideBaselineOverlay();
+            if (success) {
+              Toast
+                  .makeText(
+                      DrawingActivity.this,
+                      R.string.baseline_collection_success,
+                      Toast.LENGTH_SHORT
+                  )
+                  .show();
+            } else {
+              Toast
+                  .makeText(
+                      DrawingActivity.this,
+                      R.string.baseline_collection_failed,
+                      Toast.LENGTH_SHORT
+                  )
+                  .show();
+            }
+            sensorDataManager.startCollecting(
+                selectedUserID,
+                imageId,
+                sessionId,
+                currentItemAttempt
+            );
+          })
+      );
+    }
+  }
+
+  private void showBaselineOverlay() {
+    if (baselineOverlay != null && baselineStatusText != null) {
+      baselineOverlay.setVisibility(View.VISIBLE);
+      baselineStatusText.setVisibility(View.VISIBLE);
+      baselineStatusText.setText(getString(
+          R.string.baseline_collecting_with_count,
+          BASELINE_TARGET_SAMPLE_COUNT
+      ));
+
+      baselineOverlay.bringToFront();
+      baselineStatusText.bringToFront();
+
+      Log.d("DrawingActivity", "Baseline overlay shown - all interactions blocked");
     }
   }
 
@@ -541,11 +629,108 @@ public class DrawingActivity extends BaseActivity {
     if (sensorDataManager != null) {
       sensorDataManager.stopCollecting();
     }
+
+    if (baselineOverlay != null || baselineStatusText != null) {
+      ViewGroup rootView = findViewById(android.R.id.content);
+      if (rootView != null) {
+        if (baselineOverlay != null) {
+          rootView.removeView(baselineOverlay);
+        }
+        if (baselineStatusText != null) {
+          rootView.removeView(baselineStatusText);
+        }
+      }
+    }
   }
 
   @Override
   public boolean onSupportNavigateUp() {
     getOnBackPressedDispatcher().onBackPressed();
     return true;
+  }
+
+  private static class DrawingPointParams {
+    final long time;
+    final float x;
+    final float y;
+    final String action;
+    final int imageID;
+    final Item.Type itemType;
+    final float size;
+    final float pressure;
+    final float orientation;
+
+    private DrawingPointParams(Builder builder) {
+      this.time = builder.time;
+      this.x = builder.x;
+      this.y = builder.y;
+      this.action = builder.action;
+      this.imageID = builder.imageID;
+      this.itemType = builder.itemType;
+      this.size = builder.size;
+      this.pressure = builder.pressure;
+      this.orientation = builder.orientation;
+    }
+
+    static class Builder {
+      private long time;
+      private float x;
+      private float y;
+      private String action;
+      private int imageID;
+      private Item.Type itemType;
+      private float size;
+      private float pressure;
+      private float orientation;
+
+      Builder time(long time) {
+        this.time = time;
+        return this;
+      }
+
+      Builder x(float x) {
+        this.x = x;
+        return this;
+      }
+
+      Builder y(float y) {
+        this.y = y;
+        return this;
+      }
+
+      Builder action(String action) {
+        this.action = action;
+        return this;
+      }
+
+      Builder imageID(int imageID) {
+        this.imageID = imageID;
+        return this;
+      }
+
+      Builder itemType(Item.Type itemType) {
+        this.itemType = itemType;
+        return this;
+      }
+
+      Builder size(float size) {
+        this.size = size;
+        return this;
+      }
+
+      Builder pressure(float pressure) {
+        this.pressure = pressure;
+        return this;
+      }
+
+      Builder orientation(float orientation) {
+        this.orientation = orientation;
+        return this;
+      }
+
+      DrawingPointParams build() {
+        return new DrawingPointParams(this);
+      }
+    }
   }
 }

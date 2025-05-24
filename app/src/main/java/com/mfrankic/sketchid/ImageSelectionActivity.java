@@ -394,7 +394,7 @@ public class ImageSelectionActivity extends BaseActivity {
     editImageName.addTextChangedListener(new TextWatcher() {
       @Override
       public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-        // No action needed
+        // No action needed before text change
       }
 
       @Override
@@ -414,7 +414,7 @@ public class ImageSelectionActivity extends BaseActivity {
 
       @Override
       public void afterTextChanged(Editable s) {
-        // No action needed
+        // No action needed after text change
       }
     });
   }
@@ -476,7 +476,7 @@ public class ImageSelectionActivity extends BaseActivity {
       try {
         resourceId = Integer.parseInt(image.path);
       } catch (NumberFormatException ignored) {
-        // Ignore the exception
+        // Ignore invalid resource ID
       }
     }
 
@@ -669,7 +669,8 @@ public class ImageSelectionActivity extends BaseActivity {
           result.addAll(loadedIds);
         }
       } catch (Exception ignored) {
-        // Ignore the exception
+        // Ignore parsing errors, return empty list
+        result.clear();
       }
     }
 
@@ -1061,7 +1062,7 @@ public class ImageSelectionActivity extends BaseActivity {
           Intent.FLAG_GRANT_READ_URI_PERMISSION
       );
     } catch (SecurityException ignored) {
-      // Ignore the exception
+      // Ignore
     }
 
     long id = db.imageDao().insertImage(newImage);

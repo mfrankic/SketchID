@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.google.services)
+    id 'jacoco'
 }
 
 android {
@@ -23,10 +24,64 @@ android {
             proguardFiles(getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro')
         }
     }
+
+    testOptions {
+        unitTests {
+            returnDefaultValues = true
+            includeAndroidResources = true
+        }
+        unitTests.all {
+            jacoco {
+                includeNoLocationClasses = true
+                excludes = ['jdk.internal.*']
+            }
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+}
+
+jacoco {
+    toolVersion = "0.8.11"
+}
+
+tasks.register('jacocoTestReport', JacocoReport) {
+    dependsOn['testDebugUnitTest']
+    group = "Reporting"
+    description = "Generate Jacoco coverage reports."
+
+    reports {
+        xml.required = true
+        html.required = true
+        xml.outputLocation = layout.buildDirectory.file("reports/jacoco/test/jacocoTestReport.xml")
+        html.outputLocation = layout.buildDirectory.dir("reports/jacoco/test/html")
+    }
+
+    def fileFilter = [
+            '**/R.class',
+            '**/R$*.class',
+            '**/BuildConfig.*',
+            '**/Manifest*.*',
+            '**/*Test*.*',
+            'android/**/*.*'
+    ]
+
+    sourceDirectories.from = files([
+            "${project.projectDir}/src/main/java"
+    ])
+
+    classDirectories.from = files([
+            fileTree(dir: layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes"), excludes: fileFilter)
+    ])
+
+    executionData.from = fileTree(dir: layout.buildDirectory.dir("jacoco"), includes: ["**/*.exec"])
+}
+
+tasks.named('jacocoTestReport') {
+    mustRunAfter 'testDebugUnitTest'
 }
 
 dependencies {
@@ -41,9 +96,19 @@ dependencies {
     implementation(libs.preference)
     implementation(libs.glide)
     implementation(libs.gson)
+
     testImplementation(libs.junit)
+    testImplementation(libs.mockito.core)
+    testImplementation(libs.mockito.inline)
+    testImplementation(libs.robolectric)
+
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
+    androidTestImplementation(libs.runner)
+    androidTestImplementation(libs.rules)
+    androidTestImplementation(libs.espresso.intents)
+    androidTestImplementation(libs.room.testing)
+
     annotationProcessor(libs.room.compiler)
     annotationProcessor(libs.glide.compiler)
 }

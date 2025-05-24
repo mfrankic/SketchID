@@ -52,4 +52,24 @@
     <string name="selected_count_format">(%d)</string>
     <string name="error_invalid_resource">Invalid image resource</string>
     <string name="drag_started">Started dragging item</string>
+
+    <!-- Baseline collection strings -->
+    <string name="baseline_collecting_simple">Collecting baseline data…\nPlease hold device steady</string>
+    <string name="baseline_collecting_with_count">Collecting baseline data…\nPlease hold device steady\n(%d samples needed)</string>
+    <string name="baseline_collection_success">Baseline collected! You can now start drawing.</string>
+    <string name="baseline_collection_failed">Baseline collection failed, but you can still draw</string>
+
+    <!-- Export progress strings -->
+    <string name="export_in_progress">Exporting data…\nPlease wait</string>
+    <string name="export_all_in_progress">Exporting all data…\nPlease wait</string>
+    <string name="export_complete">Data exported successfully!</string>
+    <string name="export_failed">Failed to export data</string>
+    <string name="export_no_data">No data to export</string>
+    <string name="export_success_location">Data exported to Downloads/SketchIDData</string>
+
+    <!-- Upload progress strings -->
+    <string name="upload_in_progress">Uploading data to Firebase…\nPlease wait</string>
+    <string name="upload_all_in_progress">Uploading all data to Firebase…\nPlease wait</string>
+    <string name="upload_complete">Data uploaded successfully!</string>
+    <string name="upload_failed">Failed to upload data</string>
 </resources>

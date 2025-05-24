@@ -63,6 +63,10 @@ public class ResourceUtils {
       return 0;
     }
 
+    if (imageName == null || imageName.isEmpty()) {
+      return 0;
+    }
+
     String normalizedName = imageName.toLowerCase(Locale.ROOT);
     Integer resourceId = drawableResourceMap.get(normalizedName);
 

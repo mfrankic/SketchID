@@ -33,7 +33,7 @@ public final class SelectedImagesManager {
       try {
         intSet.add(Integer.parseInt(s));
       } catch (NumberFormatException ignored) {
-        // Ignore invalid integers
+        // Ignore any non-integer values
       }
     }
 

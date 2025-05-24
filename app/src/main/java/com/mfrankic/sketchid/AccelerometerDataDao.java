@@ -13,18 +13,6 @@ public interface AccelerometerDataDao {
   @Insert
   void insertAll(List<AccelerometerData> accelerometerDataList);
 
-  @Query("SELECT * FROM accelerometer_data WHERE user_id = :userId AND session_id = :sessionId")
-  List<AccelerometerData> getAccelerometerDataByUserAndSession(int userId, String sessionId);
-
-  @Query("DELETE FROM accelerometer_data WHERE user_id = :userId AND session_id = :sessionId")
-  void deleteAccelerometerDataByUserAndSession(int userId, String sessionId);
-
-  @Query("DELETE FROM accelerometer_data WHERE user_id = :userId")
-  void deleteAccelerometerDataByUser(int userId);
-
-  @Query("DELETE FROM accelerometer_data")
-  void deleteAllAccelerometerData();
-
   @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
   @Query(
       "SELECT\n"

@@ -21,11 +21,14 @@ public final class Constants {
   public static final String GRAVITY_DATA_PREFIX = "_gravity_data_";
   public static final String GYROSCOPE_DATA_PREFIX = "_gyroscope_data_";
   public static final String MAGNETIC_FIELD_DATA_PREFIX = "_magnetic_field_data_";
+  public static final String MAGNETIC_FIELD_BASELINE_DATA_PREFIX = "_magnetic_field_baseline_data_";
   public static final String ACCELEROMETER_DATA_PREFIX = "_accelerometer_data_";
   public static final String FILE_EXPORT_PATTERN = "%d,%d,%s,%d,%d,%s,%s,%s,%s,%d,%s,%s,%s,%s,%s%n";
   public static final String GRAVITY_EXPORT_PATTERN = "%d,%d,%s,%d,%s,%d,%d,%f,%f,%f,%s%n";
   public static final String GYROSCOPE_EXPORT_PATTERN = "%d,%d,%s,%d,%s,%d,%d,%f,%f,%f,%s%n";
   public static final String MAGNETIC_FIELD_EXPORT_PATTERN = "%d,%d,%s,%d,%s,%d,%d,%f,%f,%f,%s%n";
+  public static final String MAGNETIC_FIELD_BASELINE_EXPORT_PATTERN
+      = "%d,%d,%s,%d,%s,%d,%d,%f,%f,%f,%d,%d,%f,%f,%f,%s%n";
   public static final String ACCELEROMETER_EXPORT_PATTERN = "%d,%d,%s,%d,%s,%d,%d,%f,%f,%f,%s%n";
   public static final String SKETCHID_DATA_DIR = "SketchIDData";
   public static final String IMAGES_VIEWED = "imagesViewed";
@@ -101,6 +104,9 @@ public final class Constants {
       = "id,userID,userName,imageID,imageName,attempt,timestamp,x,y,z,drawingMode\n";
   public static final String MAGNETIC_FIELD_COLUMN_HEADERS
       = "id,userID,userName,imageID,imageName,attempt,timestamp,x,y,z,drawingMode\n";
+  public static final String MAGNETIC_FIELD_BASELINE_COLUMN_HEADERS =
+      "id,userID,userName,imageID,imageName,attempt,timestamp,avgX,avgY,avgZ,durationMs,"
+      + "sampleCount,stdDevX,stdDevY,stdDevZ,drawingMode\n";
   public static final String ACCELEROMETER_COLUMN_HEADERS
       = "id,userID,userName,imageID,imageName,attempt,timestamp,x,y,z,drawingMode\n";
   public static final String EXPORT_DATE_FORMAT = "yyyyMMdd_HHmmss";

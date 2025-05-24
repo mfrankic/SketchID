@@ -18,8 +18,9 @@ import androidx.room.RoomDatabase;
         GravityData.class,
         GyroscopeData.class,
         MagneticFieldData.class,
+        MagneticFieldBaselineData.class,
         AccelerometerData.class
-    }, version = 19, exportSchema = false
+    }, version = 20, exportSchema = false
 )
 public abstract class AppDatabase extends RoomDatabase {
   private static AppDatabase instance;
@@ -54,6 +55,8 @@ public abstract class AppDatabase extends RoomDatabase {
   public abstract GyroscopeDataDao gyroscopeDataDao();
 
   public abstract MagneticFieldDataDao magneticFieldDataDao();
+
+  public abstract MagneticFieldBaselineDataDao magneticFieldBaselineDataDao();
 
   public abstract AccelerometerDataDao accelerometerDataDao();
 }

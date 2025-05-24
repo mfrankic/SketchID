@@ -13,18 +13,6 @@ public interface GyroscopeDataDao {
   @Insert
   void insertAll(List<GyroscopeData> gyroscopeDataList);
 
-  @Query("SELECT * FROM gyroscope_data WHERE user_id = :userId AND session_id = :sessionId")
-  List<GyroscopeData> getGyroscopeDataByUserAndSession(int userId, String sessionId);
-
-  @Query("DELETE FROM gyroscope_data WHERE user_id = :userId AND session_id = :sessionId")
-  void deleteGyroscopeDataByUserAndSession(int userId, String sessionId);
-
-  @Query("DELETE FROM gyroscope_data WHERE user_id = :userId")
-  void deleteGyroscopeDataByUser(int userId);
-
-  @Query("DELETE FROM gyroscope_data")
-  void deleteAllGyroscopeData();
-
   @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
   @Query(
       "SELECT\n"

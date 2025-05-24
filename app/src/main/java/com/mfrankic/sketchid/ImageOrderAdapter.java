@@ -74,7 +74,7 @@ public class ImageOrderAdapter extends RecyclerView.Adapter<ImageOrderAdapter.Im
 
       @Override
       public void onSwiped(@NonNull RecyclerView.ViewHolder viewHolder, int direction) {
-        // No swipe action needed
+        // No swipe actions needed
       }
 
       @Override

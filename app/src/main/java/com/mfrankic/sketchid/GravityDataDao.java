@@ -13,18 +13,6 @@ public interface GravityDataDao {
   @Insert
   void insertAll(List<GravityData> gravityDataList);
 
-  @Query("SELECT * FROM gravity_data WHERE user_id = :userId AND session_id = :sessionId")
-  List<GravityData> getGravityDataByUserAndSession(int userId, String sessionId);
-
-  @Query("DELETE FROM gravity_data WHERE user_id = :userId AND session_id = :sessionId")
-  void deleteGravityDataByUserAndSession(int userId, String sessionId);
-
-  @Query("DELETE FROM gravity_data WHERE user_id = :userId")
-  void deleteGravityDataByUser(int userId);
-
-  @Query("DELETE FROM gravity_data")
-  void deleteAllGravityData();
-
   @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
   @Query(
       "SELECT\n"

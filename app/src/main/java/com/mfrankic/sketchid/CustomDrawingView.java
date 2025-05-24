@@ -133,7 +133,6 @@ public class CustomDrawingView extends View {
 
 
 
-
   @Override
   protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
     int width = MeasureSpec.getSize(widthMeasureSpec);
@@ -208,6 +207,5 @@ public class CustomDrawingView extends View {
       );
     }
   }
-
 
 }

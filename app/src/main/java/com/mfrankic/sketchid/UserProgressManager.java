@@ -163,7 +163,7 @@ public class UserProgressManager {
             }
           }
         } catch (NumberFormatException ignored) {
-          // Ignore invalid user IDs
+          // Ignore any keys that do not match the expected format
         }
       }
     }
