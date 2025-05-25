@@ -14,8 +14,8 @@ public class CustomDialogPreference extends DialogPreference {
 
   public CustomDialogPreference(Context context, AttributeSet attrs) {
     super(context, attrs, R.attr.dialogPreferenceStyle);
-    // Initialize with default color value (dark gray for text)
-    titleColor = 0xFF333331; // Direct color value for onSurface
+
+    titleColor = 0xFF333331;
   }
 
   /**
@@ -32,7 +32,6 @@ public class CustomDialogPreference extends DialogPreference {
   public void onBindViewHolder(@NonNull PreferenceViewHolder holder) {
     super.onBindViewHolder(holder);
 
-    // Set the title color
     TextView titleView = (TextView) holder.findViewById(android.R.id.title);
     if (titleView != null && isEnabled()) {
       titleView.setTextColor(titleColor);

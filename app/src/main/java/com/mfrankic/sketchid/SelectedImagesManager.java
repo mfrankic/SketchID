@@ -32,8 +32,8 @@ public final class SelectedImagesManager {
     for (String s : stringSet) {
       try {
         intSet.add(Integer.parseInt(s));
-      } catch (NumberFormatException e) {
-        // Skip invalid entries
+      } catch (NumberFormatException ignored) {
+        // Ignore any non-integer values
       }
     }
 

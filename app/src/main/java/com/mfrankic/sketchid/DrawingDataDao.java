@@ -15,6 +15,7 @@ public interface DrawingDataDao {
   @Query(
       "SELECT\n"
       + "d.id, d.time, d.x, d.y, d.`action`, d.attempt, d.item_type AS itemType,\n"
+      + "d.session_id AS sessionID, d.size, d.pressure, d.orientation,\n"
       + "u.id AS userID, u.name AS userName,\n"
       + "d.image_id AS imageID, i.name AS imageName\n"
       + "FROM drawing_data d\n"

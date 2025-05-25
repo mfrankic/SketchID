@@ -1,29 +1,31 @@
 [versions]
 agp = "8.10.0"
 junit = "4.13.2"
-junitVersion = "1.2.1"
-espressoCore = "3.6.1"
 appcompat = "1.7.0"
 material = "1.12.0"
 activity = "1.10.1"
 constraintlayout = "2.2.1"
+mockitoCore = "5.8.0"
+mockitoInline = "5.2.0"
+robolectric = "4.11.1"
 roomCommon = "2.7.1"
 roomRuntime = "2.7.1"
 roomCompiler = "2.7.1"
 googleServices = "4.4.2"
-firebaseBom = "33.13.0"
+firebaseBom = "33.14.0"
 preference = "1.2.1"
 glide = "4.16.0"
 gson = "2.13.0"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }
 appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 activity = { group = "androidx.activity", name = "activity", version.ref = "activity" }
 constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockitoCore" }
+mockito-inline = { module = "org.mockito:mockito-inline", version.ref = "mockitoInline" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 room-common = { group = "androidx.room", name = "room-common", version.ref = "roomCommon" }
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "roomRuntime" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "roomCompiler" }
@@ -37,4 +39,3 @@ gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }
-

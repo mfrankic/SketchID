@@ -8,15 +8,28 @@ public final class Constants {
   public static final String KEY_SELECTED_USER = "selected_user";
   public static final String KEY_THEME = "theme";
   public static final String KEY_USER_PROGRESS_PREFIX = "user_progress_";
+  public static final String KEY_DRAWING_MODE = "drawing_mode";
 
-  // Common source values
+  public static final String DRAWING_MODE_NORMAL = "normal";
+  public static final String DRAWING_MODE_OVERLAY = "overlay";
+
   public static final String SOURCE_DEFAULT = "default";
   public static final String SOURCE_CUSTOM = "custom";
 
-  // Common string literals
   public static final String ERROR_NAME_EMPTY = "Name cannot be empty";
   public static final String DRAWING_DATA_PREFIX = "_drawing_data_";
-  public static final String FILE_EXPORT_PATTERN = "%d,%d,%s,%d,%d,%s,%s,%s,%s,%d,%s%n";
+  public static final String GRAVITY_DATA_PREFIX = "_gravity_data_";
+  public static final String GYROSCOPE_DATA_PREFIX = "_gyroscope_data_";
+  public static final String MAGNETIC_FIELD_DATA_PREFIX = "_magnetic_field_data_";
+  public static final String MAGNETIC_FIELD_BASELINE_DATA_PREFIX = "_magnetic_field_baseline_data_";
+  public static final String ACCELEROMETER_DATA_PREFIX = "_accelerometer_data_";
+  public static final String FILE_EXPORT_PATTERN = "%d,%d,%s,%d,%d,%s,%s,%s,%s,%d,%s,%s,%s,%s,%s%n";
+  public static final String GRAVITY_EXPORT_PATTERN = "%d,%d,%s,%d,%s,%d,%d,%f,%f,%f,%s%n";
+  public static final String GYROSCOPE_EXPORT_PATTERN = "%d,%d,%s,%d,%s,%d,%d,%f,%f,%f,%s%n";
+  public static final String MAGNETIC_FIELD_EXPORT_PATTERN = "%d,%d,%s,%d,%s,%d,%d,%f,%f,%f,%s%n";
+  public static final String MAGNETIC_FIELD_BASELINE_EXPORT_PATTERN
+      = "%d,%d,%s,%d,%s,%d,%d,%f,%f,%f,%d,%d,%f,%f,%f,%s%n";
+  public static final String ACCELEROMETER_EXPORT_PATTERN = "%d,%d,%s,%d,%s,%d,%d,%f,%f,%f,%s%n";
   public static final String SKETCHID_DATA_DIR = "SketchIDData";
   public static final String IMAGES_VIEWED = "imagesViewed";
   public static final String FINISHED = "finished";
@@ -24,7 +37,6 @@ public final class Constants {
   public static final String ACTION_START = "START";
   public static final String ACTION_END = "END";
 
-  // Dialog button labels
   public static final String DELETE_BUTTON = "Delete";
   public static final String CANCEL_BUTTON = "Cancel";
   public static final String REMOVE_BUTTON = "Remove";
@@ -35,7 +47,6 @@ public final class Constants {
   public static final String YES_BUTTON = "Yes";
   public static final String NO_BUTTON = "No";
 
-  // Dialog titles and messages
   public static final String DIALOG_TITLE_IMAGE_OPTIONS = "Image Options";
   public static final String DIALOG_TITLE_REMOVE_IMAGES = "Remove Images";
   public static final String DIALOG_TITLE_UNSAVED_CHANGES = "Unsaved Changes";
@@ -49,7 +60,6 @@ public final class Constants {
       = "You have unsaved changes. What would you like to do?";
   public static final String DIALOG_MSG_EXIT_DRAWING = "Are you sure you want to exit?";
 
-  // Toast messages
   public static final String TOAST_FAILED_LOAD_DEFAULT = "Failed to load default image";
   public static final String TOAST_FAILED_LOAD_IMAGE = "Failed to load image: ";
   public static final String TOAST_NO_IMAGES_SELECTED = "No images selected for removal";
@@ -72,24 +82,33 @@ public final class Constants {
   public static final String TOAST_IMAGES_ADDED = "Images added successfully";
   public static final String TOAST_MULTI_SELECT_HINT = "You can select multiple images";
 
-  // Drawing-related constants
   public static final String DRAWING_KEY_ATTEMPTS = "drawing_attempts";
   public static final String DRAWING_KEY_TIME_STARTED = "time_started";
   public static final String DRAWING_KEY_SELECTED_IMAGE_IDS = "selected_image_ids";
   public static final String DRAWING_KEY_DEVICE_MODEL = "device_model";
   public static final String DRAWING_KEY_ANDROID_VERSION = "android_version";
+  public static final String DRAWING_KEY_MODE = "drawing_mode";
 
-  // Format patterns
   public static final String FORMAT_PROGRESS_TEXT = "Attempt: %d/%d\tOverall: %d/%d";
 
-  // Preference file names
   public static final String PREF_IMAGE_ORDER = "image_order";
   public static final String PREF_SELECTED_IMAGES = "selected_images";
   public static final String PREF_FILE_SELECTED_IMAGES = "selected_images";
 
-  // File format patterns
-  public static final String COLUMN_HEADERS
-      = "id,userID,userName,attempt,time,x,y,action,itemType,imageID,imageName\n";
+  public static final String COLUMN_HEADERS =
+      "id,userID,userName,attempt,time,x,y,action,itemType,imageID,imageName,drawingMode,size,"
+      + "pressure,orientation\n";
+  public static final String GRAVITY_COLUMN_HEADERS
+      = "id,userID,userName,imageID,imageName,attempt,timestamp,x,y,z,drawingMode\n";
+  public static final String GYROSCOPE_COLUMN_HEADERS
+      = "id,userID,userName,imageID,imageName,attempt,timestamp,x,y,z,drawingMode\n";
+  public static final String MAGNETIC_FIELD_COLUMN_HEADERS
+      = "id,userID,userName,imageID,imageName,attempt,timestamp,x,y,z,drawingMode\n";
+  public static final String MAGNETIC_FIELD_BASELINE_COLUMN_HEADERS =
+      "id,userID,userName,imageID,imageName,attempt,timestamp,avgX,avgY,avgZ,durationMs,"
+      + "sampleCount,stdDevX,stdDevY,stdDevZ,drawingMode\n";
+  public static final String ACCELEROMETER_COLUMN_HEADERS
+      = "id,userID,userName,imageID,imageName,attempt,timestamp,x,y,z,drawingMode\n";
   public static final String EXPORT_DATE_FORMAT = "yyyyMMdd_HHmmss";
   public static final String FAILED_EXPORT_MESSAGE = "Failed to create export directory";
 

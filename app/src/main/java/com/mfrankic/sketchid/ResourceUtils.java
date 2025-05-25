@@ -30,39 +30,24 @@ public class ResourceUtils {
   public static void initialize() {
     if (initialized) return;
 
-    // Add all drawable resources that will be accessed by name
-    // This is much more efficient than using getIdentifier at runtime
     initializeDrawableMap();
 
     initialized = true;
-
-    // Log all mappings in debug builds
-    logDrawableMappings();
   }
 
   private static void initializeDrawableMap() {
-    // Map all drawable resources found in the project
+
     drawableResourceMap.put("arrow", R.drawable.arrow);
+    drawableResourceMap.put("checkmark", R.drawable.checkmark);
     drawableResourceMap.put("crown", R.drawable.crown);
     drawableResourceMap.put("envelope", R.drawable.envelope);
     drawableResourceMap.put("grid", R.drawable.grid);
-    drawableResourceMap.put("house", R.drawable.house);
+    drawableResourceMap.put("heart", R.drawable.heart);
     drawableResourceMap.put("lightbulb", R.drawable.lightbulb);
-    drawableResourceMap.put("moon", R.drawable.moon);
     drawableResourceMap.put("smiley", R.drawable.smiley);
     drawableResourceMap.put("star", R.drawable.star);
-    drawableResourceMap.put("sun", R.drawable.sun);
     drawableResourceMap.put("umbrella", R.drawable.umbrella);
-  }
-
-  /**
-   * Log all available drawable mappings for debugging
-   */
-  private static void logDrawableMappings() {
-    Log.d(TAG, "Available drawable mappings:");
-    for (Map.Entry<String, Integer> entry : drawableResourceMap.entrySet()) {
-      Log.d(TAG, "  - " + entry.getKey() + " => " + entry.getValue());
-    }
+    drawableResourceMap.put("upload", R.drawable.upload);
   }
 
   /**
@@ -75,6 +60,10 @@ public class ResourceUtils {
   public static int getDrawableResourceByName(String imageName) {
     if (!initialized) {
       Log.e(TAG, "ResourceUtils not initialized! Call initialize() first.");
+      return 0;
+    }
+
+    if (imageName == null || imageName.isEmpty()) {
       return 0;
     }
 

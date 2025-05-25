@@ -41,10 +41,8 @@ public class CheckerboardDrawable extends Drawable {
     int width = getBounds().width();
     int height = getBounds().height();
 
-    // Draw light background first
     canvas.drawRect(0, 0, width, height, lightPaint);
 
-    // Draw dark squares in a checkerboard pattern
     boolean isLightRow = true;
     for (int y = 0; y < height; y += cellSize) {
       boolean isLightCell = isLightRow;

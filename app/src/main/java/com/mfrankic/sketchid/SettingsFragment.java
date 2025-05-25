@@ -42,16 +42,26 @@ import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+import java.util.function.ToLongFunction;
 
 public class SettingsFragment extends PreferenceFragmentCompat {
 
   private static final String DIALOG_PREFERENCE_KEY = "dialog_preference_key";
   private static final String DIALOG_RESULT_KEY = "dialog_result";
+  private static final String UNKNOWN_VALUE = "unknown";
+  private static final String UNKNOWN_IMAGE = "unknown_image";
+  private static final String SKETCHID_DATA_PATH = "SketchIDData/";
+  private static final String FIREBASE_PATH_SEPARATOR = "/";
 
   private EditTextPreference newUserPreference;
   private EditTextPreference drawingAttemptsPreference;
@@ -63,6 +73,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   private Executor executor;
   private AppDatabase db;
   private ListPreference userListPreference;
+  private ListPreference drawingModePreference;
   private CustomDialogPreference deleteUserPreference;
   private CustomDialogPreference deleteUserDataPreference;
   private String selectedUserID;
@@ -88,6 +99,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     newUserPreference = findPreference(getResources().getText(R.string.key_new_user));
     drawingAttemptsPreference
         = findPreference(getResources().getText(R.string.key_drawing_attempts));
+    drawingModePreference = findPreference(getResources().getText(R.string.key_drawing_mode));
     exportDataPreference = findPreference(getResources().getText(R.string.key_export_data));
     uploadDataPreference = findPreference(getResources().getText(R.string.key_upload_data));
     exportAllDataPreference = findPreference(getResources().getText(R.string.key_export_all_data));
@@ -103,6 +115,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     setupNewUserPreference();
     setupDeleteUserPreference();
     setupDrawingAttemptsPreference();
+    setupDrawingModePreference();
     setupExportDataPreference();
     setupUploadDataPreference();
     setupExportAllDataPreference();
@@ -114,19 +127,17 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
     loadUsersIntoListPreference();
 
-    // Check for unfinished users in a background thread
     executor.execute(this::checkUnfinishedUsersInitial);
 
-    // Register fragment result listener for dialog preference results
     getParentFragmentManager().setFragmentResultListener(
         DIALOG_RESULT_KEY, this, (requestKey, result) -> {
-          // Get preference key from result bundle
+
           String preferenceKey = result.getString(DIALOG_PREFERENCE_KEY);
           if (preferenceKey != null) {
-            // Find the preference that was clicked
+
             Preference preference = findPreference(preferenceKey);
             if (preference instanceof CustomDialogPreference) {
-              // Call the preference's change listener with the result value
+
               boolean changed = result.getBoolean("changed", false);
               if (changed) {
                 (preference).callChangeListener(true);
@@ -140,8 +151,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   @Override
   public void onDisplayPreferenceDialog(@NonNull Preference preference) {
     if (preference instanceof CustomDialogPreference) {
-      // Skip showing dialog for all CustomDialogPreference instances
-      // We're handling the dialogs with AlertDialog directly
+
       return;
     }
     super.onDisplayPreferenceDialog(preference);
@@ -170,15 +180,14 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
   private void setupNewUserPreference() {
     if (newUserPreference != null) {
-      // Set dialog properties
+
       newUserPreference.setOnBindEditTextListener(editText -> {
-        // Set the hint for the text field
+
         editText.setHint("Name");
-        // Clear any existing text and set cursor at the beginning
+
         editText.setText("");
       });
 
-      // Handle user submission
       newUserPreference.setOnPreferenceChangeListener((preference, newValue) -> {
         String name = newValue.toString().trim();
         if (name.isEmpty()) {
@@ -186,26 +195,22 @@ public class SettingsFragment extends PreferenceFragmentCompat {
           return false;
         }
 
-        // Add the new user to the database
         executor.execute(() -> {
           User user = new User(name);
           String newUserID = Long.toString(db.userDao().insertUser(user));
 
-          // Update the selected user preference
           PreferenceManager
               .getDefaultSharedPreferences(requireContext())
               .edit()
               .putString(KEY_SELECTED_USER, newUserID)
               .apply();
 
-          // Reload the user list preference
           requireActivity().runOnUiThread(this::loadUsersIntoListPreference);
         });
 
         return true;
       });
 
-      // Don't store text in preferences
       newUserPreference.setPersistent(false);
     }
   }
@@ -268,9 +273,9 @@ public class SettingsFragment extends PreferenceFragmentCompat {
           R.color.error,
           requireContext().getTheme()
       ));
-      // Set up click listener to show a direct AlertDialog
+
       deleteUserPreference.setOnPreferenceClickListener(preference -> {
-        // Only proceed if a user is selected
+
         if (isNotValidUserSelected()) {
           return true;
         }
@@ -278,11 +283,9 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         String dialogMessage = createDeleteUserMessage();
         Drawable dialogIcon = createWarningIcon();
 
-        // Create and show the alert dialog
         AlertDialog alertDialog = createDeleteUserDialog(dialogMessage, dialogIcon);
         alertDialog.show();
 
-        // Apply tint to the positive button
         applyErrorTintToPositiveButton(alertDialog);
 
         return true;
@@ -305,7 +308,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   }
 
   private Drawable createWarningIcon() {
-    // Get and tint the icon
+
     Drawable dialogIcon = ResourcesCompat.getDrawable(
         getResources(),
         android.R.drawable.ic_dialog_alert,
@@ -337,10 +340,8 @@ public class SettingsFragment extends PreferenceFragmentCompat {
             .makeText(getContext(), "User deleted", Toast.LENGTH_LONG)
             .show());
 
-        // Delete user's drawing data from the database
         db.drawingDataDao().deleteDrawingDataByUserID(Long.parseLong(selectedUserID));
 
-        // Delete user's session data
         UserProgressManager.deleteUserSessions(requireContext(), Long.parseLong(selectedUserID));
 
         PreferenceManager
@@ -366,8 +367,8 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       alertDialog.setOnShowListener(dialog -> alertDialog
           .getButton(DialogInterface.BUTTON_POSITIVE)
           .setTextColor(errorColor));
-    } catch (Exception e) {
-      // Ignore styling errors
+    } catch (Exception ignored) {
+      // Ignore any errors setting the color
     }
   }
 
@@ -420,261 +421,58 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     });
   }
 
+  private void setupDrawingModePreference() {
+    if (drawingModePreference != null) {
+
+      SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+      String currentMode = prefs.getString(
+          Constants.KEY_DRAWING_MODE,
+          Constants.DRAWING_MODE_NORMAL
+      );
+      int index = drawingModePreference.findIndexOfValue(currentMode);
+      if (index >= 0) {
+        drawingModePreference.setSummary(String.format(
+            "Current mode: %s",
+            drawingModePreference.getEntries()[index]
+        ));
+      }
+
+      drawingModePreference.setOnPreferenceChangeListener((preference, newValue) -> {
+        int idx = drawingModePreference.findIndexOfValue(newValue.toString());
+        if (idx >= 0) {
+          drawingModePreference.setSummary(String.format(
+              "Current mode: %s",
+              drawingModePreference.getEntries()[idx]
+          ));
+        }
+        return true;
+      });
+    }
+  }
+
   private void setupExportDataPreference() {
     if (exportDataPreference != null) {
       exportDataPreference.setOnPreferenceClickListener(preference -> {
-        executor.execute(this::exportDataToCSV);
-        return true;
-      });
-    }
-  }
-
-  private void exportDataToCSV() {
-    exportDataToCSV(false);
-  }
-
-  private boolean exportDataToCSV(boolean silent) {
-    List<DrawingExportData> drawingDataList = db
-        .drawingDataDao()
-        .getAllDrawingDataWithUsersAndImagesByUserID(Long.parseLong(selectedUserID));
-    String timestamp = new SimpleDateFormat(
-        Constants.EXPORT_DATE_FORMAT,
-                                            Locale.getDefault()
-    ).format(new Date());
-    String fileName = userListPreference.getEntry()
-                      + Constants.DRAWING_DATA_PREFIX
-                      + timestamp
-                      + ".csv";
-    ContentResolver contentResolver = requireActivity().getContentResolver();
-
-    File exportDir
-        = new File(
-        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-        Constants.SKETCHID_DATA_DIR
-    );
-    if (!exportDir.exists() && !exportDir.mkdirs()) {
-      requireActivity().runOnUiThread(() -> Toast
-          .makeText(getContext(), Constants.FAILED_EXPORT_MESSAGE, Toast.LENGTH_LONG)
-          .show());
-      return false;
-    }
-
-    File file = new File(exportDir, fileName);
-    Uri exportFileUri = Uri.fromFile(file);
-
-    if (exportFileUri != null) {
-      try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
-        if (outputStream != null) {
-          outputStream.write(Constants.COLUMN_HEADERS.getBytes());
-          for (DrawingExportData data : drawingDataList) {
-            String row = String.format(
-                Locale.getDefault(),
-                Constants.FILE_EXPORT_PATTERN,
-                data.getId(),
-                data.getUserID(),
-                data.getUserName(),
-                data.getAttempt(),
-                data.getTime(),
-                data.getX(),
-                data.getY(),
-                data.getAction(),
-                data.getItemType(),
-                data.getImageID(),
-                data.getImageName()
-            );
-            outputStream.write(row.getBytes());
-          }
-          if (!silent) {
-            requireActivity().runOnUiThread(() -> Toast
-                .makeText(
-                    getContext(),
-                    "Data exported to Downloads/SketchIDData",
-                    Toast.LENGTH_LONG
-                )
-                .show());
-          }
+        SettingsActivity activity = (SettingsActivity) getActivity();
+        if (activity != null) {
+          activity.showExportOverlay(false);
         }
-      } catch (IOException e) {
-        requireActivity().runOnUiThread(() -> Toast
-            .makeText(getContext(), "Failed to export data", Toast.LENGTH_LONG)
-            .show());
-        return false;
-      }
-    }
 
-    // For use in uploadDataToFirebase method
-    fileUri = exportFileUri;
-    return true;
-  }
-
-  private void setupUploadDataPreference() {
-    if (uploadDataPreference != null) {
-      uploadDataPreference.setOnPreferenceClickListener(preference -> {
-        executor.execute(this::uploadDataToFirebase);
-        return true;
-      });
-    }
-  }
-
-  private void uploadDataToFirebase() {
-    boolean success = exportDataToCSV(true);
-    if (!success) {
-      return;
-    }
-    FirebaseStorage storage = FirebaseStorage.getInstance();
-    StorageReference storageRef = storage.getReference();
-    String timestamp = new SimpleDateFormat(
-        Constants.EXPORT_DATE_FORMAT,
-                                            Locale.getDefault()
-    ).format(new Date());
-    String fileName = userListPreference.getEntry() + "_drawing_data_" + timestamp + ".csv";
-    StorageReference fileRef = storageRef.child("SketchIDData/" + fileName);
-
-    UploadTask uploadTask = fileRef.putFile(fileUri);
-    uploadTask
-        .addOnSuccessListener(taskSnapshot -> requireActivity().runOnUiThread(() -> Toast
-            .makeText(getContext(), "Data uploaded to Firebase", Toast.LENGTH_LONG)
-            .show()))
-        .addOnFailureListener(e -> requireActivity().runOnUiThread(() -> Toast
-            .makeText(getContext(), "Failed to upload data to Firebase", Toast.LENGTH_LONG)
-            .show()));
-
-    fileUri = null;
-  }
-
-  private void setupExportAllDataPreference() {
-    if (exportAllDataPreference != null) {
-      exportAllDataPreference.setOnPreferenceClickListener(preference -> {
         executor.execute(() -> {
-          boolean success = exportAllDataToCSV();
-          if (!success) {
-            requireActivity().runOnUiThread(() -> Toast
-                .makeText(getContext(), "Failed to export all data", Toast.LENGTH_LONG)
-                .show());
-          }
+          boolean success = exportDataToCSV(false);
+
+          requireActivity().runOnUiThread(() -> {
+            if (activity != null) {
+              activity.hideExportOverlay();
+            }
+
+            if (success) {
+              showExportMessage(getString(R.string.export_complete));
+            } else {
+              showExportMessage(getString(R.string.export_failed));
+            }
+          });
         });
-        return true;
-      });
-    }
-  }
-
-  private boolean exportAllDataToCSV() {
-    // Get all users
-    List<User> users = db.userDao().getAllUsers();
-    if (users.isEmpty()) {
-      requireActivity().runOnUiThread(() -> Toast
-          .makeText(getContext(), "No users found to export data", Toast.LENGTH_LONG)
-          .show());
-      return false;
-    }
-
-    // Create export directory
-    File exportDir = new File(
-        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-        "SketchIDData"
-    );
-    if (!exportDir.exists() && !exportDir.mkdirs()) {
-      requireActivity().runOnUiThread(() -> Toast
-          .makeText(getContext(), "Failed to create export directory", Toast.LENGTH_LONG)
-          .show());
-      return false;
-    }
-
-    ContentResolver contentResolver = requireActivity().getContentResolver();
-    boolean allExported = true;
-    String timestamp = new SimpleDateFormat(
-        Constants.EXPORT_DATE_FORMAT,
-                                            Locale.getDefault()
-    ).format(new Date());
-
-    // Export data for each user
-    for (User user : users) {
-      List<DrawingExportData> drawingDataList = db
-          .drawingDataDao()
-          .getAllDrawingDataWithUsersAndImagesByUserID(user.id);
-
-      if (drawingDataList.isEmpty()) {
-        continue; // Skip users with no data
-      }
-
-      String fileName = user.name + "_drawing_data_" + timestamp + ".csv";
-      File file = new File(exportDir, fileName);
-      Uri exportFileUri = Uri.fromFile(file);
-
-      try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
-        if (outputStream != null) {
-          outputStream.write((
-                                 "id,userID,userName,attempt,time,x,y,action,itemType,imageID,"
-                                 + "imageName%n"
-                             ).getBytes());
-
-          for (DrawingExportData data : drawingDataList) {
-            String row = String.format(
-                Locale.getDefault(),
-                "%d,%d,%s,%d,%d,%s,%s,%s,%s,%d,%s%n",
-                data.getId(),
-                data.getUserID(),
-                data.getUserName(),
-                data.getAttempt(),
-                data.getTime(),
-                data.getX(),
-                data.getY(),
-                data.getAction(),
-                data.getItemType(),
-                data.getImageID(),
-                data.getImageName()
-            );
-            outputStream.write(row.getBytes());
-          }
-        }
-      } catch (IOException e) {
-        allExported = false;
-        requireActivity().runOnUiThread(() -> Toast
-            .makeText(
-                getContext(),
-                "Failed to export data for user: " + user.name,
-                Toast.LENGTH_LONG
-            )
-            .show());
-      }
-    }
-
-    if (allExported) {
-      requireActivity().runOnUiThread(() -> Toast
-          .makeText(
-              getContext(),
-              "All drawing data exported to Downloads/SketchIDData",
-              Toast.LENGTH_LONG
-          )
-          .show());
-    }
-
-    return allExported;
-  }
-
-  private void setupDeleteUserDataPreference() {
-    if (deleteUserDataPreference != null) {
-      deleteUserDataPreference.setTitleColor(getResources().getColor(
-          R.color.error,
-          requireContext().getTheme()
-      ));
-      // Set up click listener to show a direct AlertDialog
-      deleteUserDataPreference.setOnPreferenceClickListener(preference -> {
-        // Only proceed if a user is selected
-        if (isNotValidUserSelected()) {
-          return true;
-        }
-
-        String dialogMessage = createDeleteUserDataMessage();
-        Drawable dialogIcon = createWarningIcon();
-
-        // Create and show the alert dialog
-        AlertDialog alertDialog = createDeleteUserDataDialog(dialogMessage, dialogIcon);
-        alertDialog.show();
-
-        // Apply tint to the positive button
-        applyErrorTintToPositiveButton(alertDialog);
-
         return true;
       });
     }
@@ -684,137 +482,342 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     return String.format(
         "Are you sure you want to delete drawing data for "
         + "user: %s?%n%nThis will remove all "
-        + "drawing history but keep the user profile.",
-        userListPreference.getEntry()
+        + "drawing history but keep the user profile.", userListPreference.getEntry()
     );
   }
 
-  private AlertDialog createDeleteUserDataDialog(String dialogMessage, Drawable dialogIcon) {
-    return new AlertDialog.Builder(requireContext())
-        .setTitle("Delete User Data?")
-        .setMessage(dialogMessage)
-        .setIcon(dialogIcon)
-        .setPositiveButton(DELETE_BUTTON, (dialog, which) -> executeUserDataDeletion())
-        .setNegativeButton(CANCEL_BUTTON, null)
-        .create();
+  private boolean isValidUserForExport() {
+    return selectedUserID != null && !selectedUserID.equals("-1");
   }
 
-  private void executeUserDataDeletion() {
-    // Execute data deletion
-    executor.execute(() -> {
-      int deletedRows = db
-          .drawingDataDao()
-          .deleteDrawingDataByUserID(Long.parseLong(selectedUserID));
-      if (deletedRows > 0) {
-        requireActivity().runOnUiThread(() -> Toast
-            .makeText(getContext(), "User drawing data deleted", Toast.LENGTH_LONG)
-            .show());
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
-        prefs.edit().remove(KEY_CURRENT_ITEM_ATTEMPT).remove(KEY_CURRENT_ITEM_INDEX).apply();
-      } else {
-        requireActivity().runOnUiThread(() -> Toast
-            .makeText(getContext(), "Failed to delete user drawing data", Toast.LENGTH_LONG)
-            .show());
+  private ExportDataBundle retrieveAndProcessAllData() {
+    long userId = Long.parseLong(selectedUserID);
+
+    List<DrawingExportData> drawingData = db
+        .drawingDataDao()
+        .getAllDrawingDataWithUsersAndImagesByUserID(userId);
+    List<GravityExportData> gravityData = db
+        .gravityDataDao()
+        .getGravityDataWithUsersAndImagesByUserId(userId);
+    List<GyroscopeExportData> gyroscopeData = db
+        .gyroscopeDataDao()
+        .getGyroscopeDataWithUsersAndImagesByUserId(userId);
+    List<MagneticFieldExportData> magneticFieldData = db
+        .magneticFieldDataDao()
+        .getMagneticFieldDataWithUsersAndImagesByUserId(userId);
+    List<MagneticFieldBaselineExportData> magneticFieldBaselineData = db
+        .magneticFieldBaselineDataDao()
+        .getBaselineDataWithUsersAndImagesByUserId(userId);
+    List<AccelerometerExportData> accelerometerData = db
+        .accelerometerDataDao()
+        .getAccelerometerDataWithUsersAndImagesByUserId(userId);
+
+    processDrawingModes(drawingData);
+    processGravityDrawingModes(gravityData);
+    processGyroscopeDrawingModes(gyroscopeData);
+    processMagneticFieldDrawingModes(magneticFieldData);
+    processMagneticFieldBaselineDrawingModes(magneticFieldBaselineData);
+    processAccelerometerDrawingModes(accelerometerData);
+
+    return new ExportDataBundle(
+        groupDataByDrawingMode(drawingData),
+        groupGravityDataByDrawingMode(gravityData),
+        groupGyroscopeDataByDrawingMode(gyroscopeData),
+        groupMagneticFieldDataByDrawingMode(magneticFieldData),
+        groupMagneticFieldBaselineDataByDrawingMode(magneticFieldBaselineData),
+        groupAccelerometerDataByDrawingMode(accelerometerData)
+    );
+  }
+
+  private void uploadDataToFirebase(SettingsActivity activity) {
+    boolean success = exportDataToCSV(true);
+    if (!success || fileUri == null) {
+      handleUploadFailure(activity);
+      return;
+    }
+
+    FirebaseStorage storage = FirebaseStorage.getInstance();
+    StorageReference storageRef = storage.getReference();
+
+    // Extract the file path from the fileUri to maintain the new directory structure
+    String filePath = fileUri.getPath();
+    if (filePath != null && filePath.contains(SKETCHID_DATA_PATH)) {
+      uploadFileToFirebaseStorage(activity, storageRef, filePath);
+    } else {
+      handleUploadFailure(activity);
+    }
+
+    fileUri = null;
+  }
+
+  private void handleUploadFailure(SettingsActivity activity) {
+    requireActivity().runOnUiThread(() -> {
+      if (activity != null) {
+        activity.hideUploadOverlay();
       }
+      showExportMessage(getString(R.string.upload_failed));
     });
   }
 
-  private void setupUploadAllDataPreference() {
-    if (uploadAllDataPreference != null) {
-      uploadAllDataPreference.setOnPreferenceClickListener(preference -> {
-        executor.execute(this::uploadAllDataToFirebase);
-        return true;
-      });
-    }
+  private void uploadFileToFirebaseStorage(
+      SettingsActivity activity,
+      StorageReference storageRef,
+      String filePath
+  ) {
+    // Extract the relative path from SketchIDData onwards
+    String relativePath = filePath.substring(filePath.indexOf(SKETCHID_DATA_PATH));
+    StorageReference fileRef = storageRef.child(relativePath);
+
+    UploadTask uploadTask = fileRef.putFile(fileUri);
+    uploadTask
+        .addOnSuccessListener(taskSnapshot -> handleUploadSuccess(activity))
+        .addOnFailureListener(e -> handleUploadFailure(activity));
   }
 
-  private void uploadAllDataToFirebase() {
-    // Get all users
-    List<User> users = db.userDao().getAllUsers();
-    if (users.isEmpty()) {
-      showToast("No users found to upload data");
-      return;
+  private void handleUploadSuccess(SettingsActivity activity) {
+    requireActivity().runOnUiThread(() -> {
+      if (activity != null) {
+        activity.hideUploadOverlay();
+      }
+      showExportMessage(getString(R.string.upload_complete));
+    });
+  }
+
+  private boolean exportDataToCSV(boolean silent) {
+    if (!isValidUserForExport()) {
+      return false;
     }
 
-    // Create export directory
     File exportDir = createExportDirectory();
     if (exportDir == null) {
-      return;
+      return false;
     }
 
+    ExportDataBundle dataBundle = retrieveAndProcessAllData();
+    if (dataBundle.isEmpty()) {
+      showExportMessage(getString(R.string.export_no_data));
+      return false;
+    }
+
+    boolean allExported = exportAllDataTypesNewStructure(dataBundle, exportDir);
+
+    if (allExported && !silent) {
+      showExportMessage(getString(R.string.export_success_location));
+    }
+
+    return allExported;
+  }
+
+  private boolean exportAllDataTypesNewStructure(ExportDataBundle dataBundle, File exportDir) {
     ContentResolver contentResolver = requireActivity().getContentResolver();
-    FirebaseStorage storage = FirebaseStorage.getInstance();
-    StorageReference storageRef = storage.getReference();
-    AtomicInteger uploadedCount = new AtomicInteger();
-    int totalUsers = users.size();
     String timestamp = new SimpleDateFormat(
         Constants.EXPORT_DATE_FORMAT,
                                             Locale.getDefault()
     ).format(new Date());
 
-    UploadContext context = new UploadContext(
+    // Create user directory with timestamp
+    String userDirName = userListPreference.getEntry() + "_" + timestamp;
+    File userDir = new File(exportDir, userDirName);
+    if (!userDir.exists() && !userDir.mkdirs()) {
+      showExportMessage("Failed to create user directory");
+      return false;
+    }
+
+    boolean allExported = true;
+
+    // Export data for each mode
+    allExported &= exportDataByModeAndImage(
+        dataBundle.drawingDataByMode,
+        userDir,
         contentResolver,
-                                              storageRef,
-                                              uploadedCount,
-                                              totalUsers,
-                                              timestamp,
-                                              exportDir
+        Constants.DRAWING_DATA_PREFIX
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.gravityDataByMode,
+        userDir,
+        contentResolver,
+        Constants.GRAVITY_DATA_PREFIX,
+        this::writeGravityDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.gyroscopeDataByMode,
+        userDir,
+        contentResolver,
+        Constants.GYROSCOPE_DATA_PREFIX,
+        this::writeGyroscopeDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.magneticFieldDataByMode,
+        userDir,
+        contentResolver,
+        Constants.MAGNETIC_FIELD_DATA_PREFIX,
+        this::writeMagneticFieldDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.magneticFieldBaselineDataByMode,
+        userDir,
+        contentResolver,
+        Constants.MAGNETIC_FIELD_BASELINE_DATA_PREFIX,
+        this::writeMagneticFieldBaselineDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.accelerometerDataByMode,
+        userDir,
+        contentResolver,
+        Constants.ACCELEROMETER_DATA_PREFIX,
+        this::writeAccelerometerDataToStream
     );
 
-    // Export and upload data for each user
-    for (User user : users) {
-      List<DrawingExportData> drawingDataList = db
-          .drawingDataDao()
-          .getAllDrawingDataWithUsersAndImagesByUserID(user.id);
-
-      if (drawingDataList.isEmpty()) {
-        continue; // Skip users with no data
-      }
-
-      processUserData(user, drawingDataList, context);
-    }
+    return allExported;
   }
 
-  private void showToast(String message) {
-    requireActivity().runOnUiThread(() -> Toast
-        .makeText(getContext(), message, Toast.LENGTH_LONG)
-        .show());
-  }
-
-  private void processUserData(
-      User user,
-      List<DrawingExportData> drawingDataList,
-      UploadContext context
+  private boolean exportDataByModeAndImage(
+      Map<String, List<DrawingExportData>> dataByMode,
+      File userDir,
+      ContentResolver contentResolver,
+      String dataPrefix
   ) {
-    String fileName = user.name + Constants.DRAWING_DATA_PREFIX + context.timestamp + ".csv";
-    File file = new File(context.exportDir, fileName);
-    Uri uploadFileUri = Uri.fromFile(file);
+    boolean allExported = true;
 
-    try (OutputStream outputStream = context.contentResolver.openOutputStream(uploadFileUri)) {
-      if (outputStream != null) {
-        writeUserDataToFile(outputStream, drawingDataList);
-        uploadFileToFirebase(
-            user,
-            fileName,
-            uploadFileUri,
-            context.storageRef,
-            context.uploadedCount,
-            context.totalUsers
-        );
+    for (Map.Entry<String, List<DrawingExportData>> modeEntry : dataByMode.entrySet()) {
+      String mode = modeEntry.getKey();
+      List<DrawingExportData> modeData = modeEntry.getValue();
+
+      if (!shouldSkipModeData(modeData)) {
+        File modeDir = createModeDirectory(userDir, mode);
+        if (modeDir != null) {
+          boolean modeExported = exportDataForMode(
+              modeData,
+              modeDir,
+              contentResolver,
+              dataPrefix,
+              mode
+          );
+          allExported &= modeExported;
+        } else {
+          allExported = false;
+        }
       }
+    }
+
+    return allExported;
+  }
+
+  private boolean shouldSkipModeData(List<DrawingExportData> modeData) {
+    return modeData.isEmpty();
+  }
+
+  private File createModeDirectory(File userDir, String mode) {
+    File modeDir = new File(userDir, mode);
+    if (!modeDir.exists() && !modeDir.mkdirs()) {
+      showExportMessage("Failed to create mode directory: " + mode);
+      return null;
+    }
+    return modeDir;
+  }
+
+  private boolean exportDataForMode(
+      List<DrawingExportData> modeData,
+      File modeDir,
+      ContentResolver contentResolver,
+      String dataPrefix,
+      String mode
+  ) {
+    boolean allExported = true;
+    Map<String, List<DrawingExportData>> dataByImage = groupDrawingDataByImage(modeData);
+
+    for (Map.Entry<String, List<DrawingExportData>> imageEntry : dataByImage.entrySet()) {
+      String imageName = imageEntry.getKey();
+      List<DrawingExportData> imageData = imageEntry.getValue();
+
+      boolean imageExported = exportDataForImage(
+          imageName,
+          imageData,
+          modeDir,
+          contentResolver,
+          dataPrefix,
+          mode
+      );
+      allExported &= imageExported;
+    }
+
+    return allExported;
+  }
+
+  private boolean exportDataForImage(
+      String imageName,
+      List<DrawingExportData> imageData,
+      File modeDir,
+      ContentResolver contentResolver,
+      String dataPrefix,
+      String mode
+  ) {
+    // Convert to lowercase and add underscores
+    String formattedImageName = imageName.toLowerCase();
+    String formattedDataType = formatDataTypeForFilename(dataPrefix);
+    String fileName = formattedImageName + "_" + formattedDataType + ".csv";
+
+    File file = new File(modeDir, fileName);
+    Uri exportFileUri = Uri.fromFile(file);
+
+    try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
+      if (outputStream != null) {
+        writeDrawingDataToStream(outputStream, imageData);
+
+        if (mode.equals(Constants.DRAWING_MODE_NORMAL)) {
+          fileUri = exportFileUri;
+        }
+      }
+      return true;
     } catch (IOException e) {
-      showToast("Failed to export data for user: " + user.name);
+      showExportMessage("Failed to export " + dataPrefix + " data for image: " + imageName);
+      return false;
     }
   }
 
-  private void writeUserDataToFile(
-      OutputStream outputStream,
-      List<DrawingExportData> drawingDataList
-  )
+  private Map<String, List<DrawingExportData>> groupDrawingDataByImage(List<DrawingExportData> data) {
+    Map<String, List<DrawingExportData>> dataByImage = new HashMap<>();
+
+    for (DrawingExportData item : data) {
+      String imageName = item.getImageName();
+      if (imageName == null || imageName.isEmpty()) {
+        imageName = UNKNOWN_IMAGE;
+      }
+
+      dataByImage.computeIfAbsent(imageName, k -> new ArrayList<>()).add(item);
+    }
+
+    return dataByImage;
+  }
+
+  private String formatDataTypeForFilename(String dataPrefix) {
+    // Remove leading and trailing underscores and convert to lowercase
+    String cleanPrefix = dataPrefix.replace("_", "").toLowerCase();
+
+    // Add underscores between words for better readability
+    switch (cleanPrefix) {
+      case "drawingdata":
+        return "drawing_data";
+      case "gravitydata":
+        return "gravity_data";
+      case "gyroscopedata":
+        return "gyroscope_data";
+      case "magneticfielddata":
+        return "magnetic_field_data";
+      case "magneticfieldbaselinedata":
+        return "magnetic_field_baseline_data";
+      case "accelerometerdata":
+        return "accelerometer_data";
+      default:
+        return cleanPrefix;
+    }
+  }
+
+  private void writeDrawingDataToStream(OutputStream outputStream, List<DrawingExportData> modeData)
   throws IOException {
     outputStream.write(Constants.COLUMN_HEADERS.getBytes());
 
-    for (DrawingExportData data : drawingDataList) {
+    for (DrawingExportData data : modeData) {
       String row = String.format(
           Locale.getDefault(),
           Constants.FILE_EXPORT_PATTERN,
@@ -828,45 +831,291 @@ public class SettingsFragment extends PreferenceFragmentCompat {
           data.getAction(),
           data.getItemType(),
           data.getImageID(),
-          data.getImageName()
+          data.getImageName(),
+          data.getDrawingMode(),
+          data.getSize(),
+          data.getPressure(),
+          data.getOrientation()
       );
       outputStream.write(row.getBytes());
     }
   }
 
-  private void uploadFileToFirebase(
-      User user,
-      String fileName,
-      Uri uploadFileUri,
-      StorageReference storageRef,
-      AtomicInteger uploadedCount,
-      int totalUsers
+  private <T> boolean exportSensorDataByModeAndImage(
+      Map<String, List<T>> dataByMode,
+      File userDir,
+      ContentResolver contentResolver,
+      String dataPrefix,
+      SensorDataWriter<T> writer
   ) {
-    StorageReference fileRef = storageRef.child("SketchIDData/" + fileName);
-    UploadTask uploadTask = fileRef.putFile(uploadFileUri);
+    boolean allExported = true;
 
-    uploadTask.addOnSuccessListener(taskSnapshot -> {
-      uploadedCount.getAndIncrement();
-      if (uploadedCount.get() == totalUsers) {
-        showToast("All data uploaded to Firebase");
+    for (Map.Entry<String, List<T>> modeEntry : dataByMode.entrySet()) {
+      String mode = modeEntry.getKey();
+      List<T> modeData = modeEntry.getValue();
+
+      if (!shouldSkipSensorModeData(modeData)) {
+        File modeDir = createModeDirectory(userDir, mode);
+        if (modeDir != null) {
+          boolean modeExported = exportSensorDataForMode(
+              modeData,
+              modeDir,
+              contentResolver,
+              dataPrefix,
+              writer
+          );
+          allExported &= modeExported;
+        } else {
+          allExported = false;
+        }
       }
-    }).addOnFailureListener(e -> {
-      showToast("Failed to upload data for user: " + user.name);
-      uploadedCount.getAndIncrement();
-    });
+    }
+
+    return allExported;
   }
 
-  private File createExportDirectory() {
-    File exportDir
-        = new File(
-        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-        Constants.SKETCHID_DATA_DIR
-    );
-    if (!exportDir.exists() && !exportDir.mkdirs()) {
-      showToast(Constants.FAILED_EXPORT_MESSAGE);
-      return null;
+  private <T> boolean shouldSkipSensorModeData(List<T> modeData) {
+    return modeData.isEmpty();
+  }
+
+  private <T> boolean exportSensorDataForMode(
+      List<T> modeData,
+      File modeDir,
+      ContentResolver contentResolver,
+      String dataPrefix,
+      SensorDataWriter<T> writer
+  ) {
+    boolean allExported = true;
+    Map<String, List<T>> dataByImage = groupSensorDataByImage(modeData);
+
+    for (Map.Entry<String, List<T>> imageEntry : dataByImage.entrySet()) {
+      String imageName = imageEntry.getKey();
+      List<T> imageData = imageEntry.getValue();
+
+      boolean imageExported = exportSensorDataForImage(
+          imageName,
+          imageData,
+          modeDir,
+          contentResolver,
+          dataPrefix,
+          writer
+      );
+      allExported &= imageExported;
     }
-    return exportDir;
+
+    return allExported;
+  }
+
+  private <T> boolean exportSensorDataForImage(
+      String imageName,
+      List<T> imageData,
+      File modeDir,
+      ContentResolver contentResolver,
+      String dataPrefix,
+      SensorDataWriter<T> writer
+  ) {
+    // Convert to lowercase and add underscores
+    String formattedImageName = imageName.toLowerCase();
+    String formattedDataType = formatDataTypeForFilename(dataPrefix);
+    String fileName = formattedImageName + "_" + formattedDataType + ".csv";
+
+    File file = new File(modeDir, fileName);
+    Uri exportFileUri = Uri.fromFile(file);
+
+    try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
+      if (outputStream != null) {
+        writer.writeData(outputStream, imageData);
+      }
+      return true;
+    } catch (IOException e) {
+      showExportMessage("Failed to export " + dataPrefix + " data for image: " + imageName);
+      return false;
+    }
+  }
+
+  private <T> Map<String, List<T>> groupSensorDataByImage(List<T> data) {
+    Map<String, List<T>> dataByImage = new HashMap<>();
+
+    for (T item : data) {
+      String imageName = getSensorDataImageName(item);
+      if (imageName == null || imageName.isEmpty()) {
+        imageName = UNKNOWN_IMAGE;
+      }
+
+      dataByImage.computeIfAbsent(imageName, k -> new ArrayList<>()).add(item);
+    }
+
+    return dataByImage;
+  }
+
+  private String getSensorDataImageName(Object sensorData) {
+    if (sensorData instanceof GravityExportData) {
+      return ((GravityExportData) sensorData).getImageName();
+    } else if (sensorData instanceof GyroscopeExportData) {
+      return ((GyroscopeExportData) sensorData).getImageName();
+    } else if (sensorData instanceof MagneticFieldExportData) {
+      return ((MagneticFieldExportData) sensorData).getImageName();
+    } else if (sensorData instanceof MagneticFieldBaselineExportData) {
+      return ((MagneticFieldBaselineExportData) sensorData).getImageName();
+    } else if (sensorData instanceof AccelerometerExportData) {
+      return ((AccelerometerExportData) sensorData).getImageName();
+    }
+    return UNKNOWN_IMAGE;
+  }
+
+  private void writeGravityDataToStream(OutputStream outputStream, List<GravityExportData> data)
+  throws IOException {
+    outputStream.write(Constants.GRAVITY_COLUMN_HEADERS.getBytes());
+    for (GravityExportData item : data) {
+      String row = String.format(
+          Locale.getDefault(),
+          Constants.GRAVITY_EXPORT_PATTERN,
+          item.getId(),
+          item.getUserId(),
+          item.getUserName(),
+          item.getImageId(),
+          item.getImageName(),
+          item.getAttempt(),
+          item.getTimestamp(),
+          item.getX(),
+          item.getY(),
+          item.getZ(),
+          item.getDrawingMode()
+      );
+      outputStream.write(row.getBytes());
+    }
+  }
+
+  private void writeGyroscopeDataToStream(OutputStream outputStream, List<GyroscopeExportData> data)
+  throws IOException {
+    outputStream.write(Constants.GYROSCOPE_COLUMN_HEADERS.getBytes());
+    for (GyroscopeExportData item : data) {
+      String row = String.format(
+          Locale.getDefault(),
+          Constants.GYROSCOPE_EXPORT_PATTERN,
+          item.getId(),
+          item.getUserId(),
+          item.getUserName(),
+          item.getImageId(),
+          item.getImageName(),
+          item.getAttempt(),
+          item.getTimestamp(),
+          item.getX(),
+          item.getY(),
+          item.getZ(),
+          item.getDrawingMode()
+      );
+      outputStream.write(row.getBytes());
+    }
+  }
+
+  private void writeMagneticFieldDataToStream(
+      OutputStream outputStream,
+      List<MagneticFieldExportData> data
+  )
+  throws IOException {
+    outputStream.write(Constants.MAGNETIC_FIELD_COLUMN_HEADERS.getBytes());
+    for (MagneticFieldExportData item : data) {
+      String row = String.format(
+          Locale.getDefault(),
+          Constants.MAGNETIC_FIELD_EXPORT_PATTERN,
+          item.getId(),
+          item.getUserId(),
+          item.getUserName(),
+          item.getImageId(),
+          item.getImageName(),
+          item.getAttempt(),
+          item.getTimestamp(),
+          item.getX(),
+          item.getY(),
+          item.getZ(),
+          item.getDrawingMode()
+      );
+      outputStream.write(row.getBytes());
+    }
+  }
+
+  private void writeMagneticFieldBaselineDataToStream(
+      OutputStream outputStream,
+      List<MagneticFieldBaselineExportData> data
+  )
+  throws IOException {
+    outputStream.write(Constants.MAGNETIC_FIELD_BASELINE_COLUMN_HEADERS.getBytes());
+    for (MagneticFieldBaselineExportData item : data) {
+      String row = String.format(
+          Locale.getDefault(),
+          Constants.MAGNETIC_FIELD_BASELINE_EXPORT_PATTERN,
+          item.getId(),
+          item.getUserId(),
+          item.getUserName(),
+          item.getImageId(),
+          item.getImageName(),
+          item.getAttempt(),
+          item.getTimestamp(),
+          item.getAvgX(),
+          item.getAvgY(),
+          item.getAvgZ(),
+          item.getDurationMs(),
+          item.getSampleCount(),
+          item.getStdDevX(),
+          item.getStdDevY(),
+          item.getStdDevZ(),
+          item.getDrawingMode()
+      );
+      outputStream.write(row.getBytes());
+    }
+  }
+
+  private void writeAccelerometerDataToStream(
+      OutputStream outputStream,
+      List<AccelerometerExportData> data
+  )
+  throws IOException {
+    outputStream.write(Constants.ACCELEROMETER_COLUMN_HEADERS.getBytes());
+    for (AccelerometerExportData item : data) {
+      String row = String.format(
+          Locale.getDefault(),
+          Constants.ACCELEROMETER_EXPORT_PATTERN,
+          item.getId(),
+          item.getUserId(),
+          item.getUserName(),
+          item.getImageId(),
+          item.getImageName(),
+          item.getAttempt(),
+          item.getTimestamp(),
+          item.getX(),
+          item.getY(),
+          item.getZ(),
+          item.getDrawingMode()
+      );
+      outputStream.write(row.getBytes());
+    }
+  }
+
+  private void setupDeleteUserDataPreference() {
+    if (deleteUserDataPreference != null) {
+      deleteUserDataPreference.setTitleColor(getResources().getColor(
+          R.color.error,
+          requireContext().getTheme()
+      ));
+
+      deleteUserDataPreference.setOnPreferenceClickListener(preference -> {
+
+        if (isNotValidUserSelected()) {
+          return true;
+        }
+
+        String dialogMessage = createDeleteUserDataMessage();
+        Drawable dialogIcon = createWarningIcon();
+
+        AlertDialog alertDialog = createDeleteUserDataDialog(dialogMessage, dialogIcon);
+        alertDialog.show();
+
+        applyErrorTintToPositiveButton(alertDialog);
+
+        return true;
+      });
+    }
   }
 
   private void setupClearDataPreference() {
@@ -875,13 +1124,12 @@ public class SettingsFragment extends PreferenceFragmentCompat {
           R.color.error,
           requireContext().getTheme()
       ));
-      // Set up click listener to show a direct AlertDialog
+
       clearDataPreference.setOnPreferenceClickListener(preference -> {
         String dialogMessage = "Are you sure you want to delete ALL drawing data for ALL users?%n%n"
                                + "This action will permanently remove all drawing data from the "
                                + "database and cannot be undone.";
 
-        // Get and tint the icon
         Drawable dialogIcon = ResourcesCompat.getDrawable(
             getResources(),
             android.R.drawable.ic_dialog_alert,
@@ -892,14 +1140,13 @@ public class SettingsFragment extends PreferenceFragmentCompat {
           dialogIcon.setTint(getResources().getColor(R.color.error, requireContext().getTheme()));
         }
 
-        // Create and show the alert dialog
         AlertDialog alertDialog = new AlertDialog.Builder(requireContext())
             .setTitle("Clear All Drawing Data?")
             .setMessage(dialogMessage)
             .setIcon(dialogIcon)
             .setPositiveButton(
                 DELETE_BUTTON, (dialog, which) ->
-                    // Execute clearing all data
+
                     executor.execute(() -> {
                       db.drawingDataDao().deleteAllDrawingData();
                       SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(
@@ -924,19 +1171,75 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
         alertDialog.show();
 
-        // Apply tint to the positive button
         try {
           int errorColor = getResources().getColor(R.color.error, requireContext().getTheme());
           alertDialog.setOnShowListener(dialog -> alertDialog
               .getButton(DialogInterface.BUTTON_POSITIVE)
               .setTextColor(errorColor));
-        } catch (Exception e) {
-          // Ignore styling errors
+        } catch (Exception ignored) {
+          // Ignore any errors setting the color
         }
 
         return true;
       });
     }
+  }
+
+  private void setupUploadDataPreference() {
+    if (uploadDataPreference != null) {
+      uploadDataPreference.setOnPreferenceClickListener(preference -> {
+        SettingsActivity activity = (SettingsActivity) getActivity();
+        if (activity != null) {
+          activity.showUploadOverlay(false);
+        }
+
+        executor.execute(() -> uploadDataToFirebase(activity));
+        return true;
+      });
+    }
+  }
+
+  private void setupExportAllDataPreference() {
+    if (exportAllDataPreference != null) {
+      exportAllDataPreference.setOnPreferenceClickListener(preference -> {
+        SettingsActivity activity = (SettingsActivity) getActivity();
+        if (activity != null) {
+          activity.showExportOverlay(true);
+        }
+
+        executor.execute(() -> {
+          boolean success = exportAllDataToCSV();
+
+          requireActivity().runOnUiThread(() -> {
+            if (activity != null) {
+              activity.hideExportOverlay();
+            }
+
+            if (success) {
+              showExportMessage(getString(R.string.export_complete));
+            } else {
+              showExportMessage(getString(R.string.export_failed));
+            }
+          });
+        });
+        return true;
+      });
+    }
+  }
+
+  private boolean exportAllDataToCSV() {
+    List<User> users = db.userDao().getAllUsers();
+    if (users.isEmpty()) {
+      showExportMessage("No users found to export data");
+      return false;
+    }
+
+    File exportDir = createExportDirectory();
+    if (exportDir == null) {
+      return false;
+    }
+
+    return exportDataForAllUsers(users, exportDir);
   }
 
   private void setupSelectImagePreference() {
@@ -947,7 +1250,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
                 && result.getData() != null) {
               int selectedImageId = result.getData().getIntExtra("selected_image_id", -1);
               if (selectedImageId != -1) {
-                // Handle the selected image
+
                 Toast
                     .makeText(
                         getContext(),
@@ -968,6 +1271,202 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     }
   }
 
+  private void showExportMessage(String message) {
+    requireActivity().runOnUiThread(() -> Toast
+        .makeText(getContext(), message, Toast.LENGTH_LONG)
+        .show());
+  }
+
+  private boolean exportDataForAllUsers(List<User> users, File exportDir) {
+    ContentResolver contentResolver = requireActivity().getContentResolver();
+    boolean allExported = true;
+    String timestamp = createTimestamp();
+
+    for (User user : users) {
+      boolean userDataExported = exportDataForSingleUserNewStructure(
+          user,
+          exportDir,
+          contentResolver,
+          timestamp
+      );
+      allExported &= userDataExported;
+    }
+
+    if (allExported) {
+      showExportMessage("All drawing data exported to Downloads/SketchIDData");
+    }
+
+    return allExported;
+  }
+
+  private boolean exportDataForSingleUserNewStructure(
+      User user,
+      File exportDir,
+      ContentResolver contentResolver,
+      String timestamp
+  ) {
+    // Create user directory with timestamp
+    String userDirName = user.name + "_" + timestamp;
+    File userDir = new File(exportDir, userDirName);
+    if (!userDir.exists() && !userDir.mkdirs()) {
+      showExportMessage("Failed to create user directory for: " + user.name);
+      return false;
+    }
+
+    // Get all data for this user
+    ExportDataBundle dataBundle = retrieveAndProcessUserData(user.id);
+    if (dataBundle.isEmpty()) {
+      return true; // No data to export, but not an error
+    }
+
+    boolean allExported = true;
+
+    // Export data for each mode using new structure
+    allExported &= exportDataByModeAndImage(
+        dataBundle.drawingDataByMode,
+        userDir,
+        contentResolver,
+        Constants.DRAWING_DATA_PREFIX
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.gravityDataByMode,
+        userDir,
+        contentResolver,
+        Constants.GRAVITY_DATA_PREFIX,
+        this::writeGravityDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.gyroscopeDataByMode,
+        userDir,
+        contentResolver,
+        Constants.GYROSCOPE_DATA_PREFIX,
+        this::writeGyroscopeDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.magneticFieldDataByMode,
+        userDir,
+        contentResolver,
+        Constants.MAGNETIC_FIELD_DATA_PREFIX,
+        this::writeMagneticFieldDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.magneticFieldBaselineDataByMode,
+        userDir,
+        contentResolver,
+        Constants.MAGNETIC_FIELD_BASELINE_DATA_PREFIX,
+        this::writeMagneticFieldBaselineDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.accelerometerDataByMode,
+        userDir,
+        contentResolver,
+        Constants.ACCELEROMETER_DATA_PREFIX,
+        this::writeAccelerometerDataToStream
+    );
+
+    return allExported;
+  }
+
+  private ExportDataBundle retrieveAndProcessUserData(long userId) {
+    List<DrawingExportData> drawingData = db
+        .drawingDataDao()
+        .getAllDrawingDataWithUsersAndImagesByUserID(userId);
+    List<GravityExportData> gravityData = db
+        .gravityDataDao()
+        .getGravityDataWithUsersAndImagesByUserId(userId);
+    List<GyroscopeExportData> gyroscopeData = db
+        .gyroscopeDataDao()
+        .getGyroscopeDataWithUsersAndImagesByUserId(userId);
+    List<MagneticFieldExportData> magneticFieldData = db
+        .magneticFieldDataDao()
+        .getMagneticFieldDataWithUsersAndImagesByUserId(userId);
+    List<MagneticFieldBaselineExportData> magneticFieldBaselineData = db
+        .magneticFieldBaselineDataDao()
+        .getBaselineDataWithUsersAndImagesByUserId(userId);
+    List<AccelerometerExportData> accelerometerData = db
+        .accelerometerDataDao()
+        .getAccelerometerDataWithUsersAndImagesByUserId(userId);
+
+    processDrawingModes(drawingData);
+    processGravityDrawingModes(gravityData);
+    processGyroscopeDrawingModes(gyroscopeData);
+    processMagneticFieldDrawingModes(magneticFieldData);
+    processMagneticFieldBaselineDrawingModes(magneticFieldBaselineData);
+    processAccelerometerDrawingModes(accelerometerData);
+
+    return new ExportDataBundle(
+        groupDataByDrawingMode(drawingData),
+        groupGravityDataByDrawingMode(gravityData),
+        groupGyroscopeDataByDrawingMode(gyroscopeData),
+        groupMagneticFieldDataByDrawingMode(magneticFieldData),
+        groupMagneticFieldBaselineDataByDrawingMode(magneticFieldBaselineData),
+        groupAccelerometerDataByDrawingMode(accelerometerData)
+    );
+  }
+
+  /**
+   * Group drawing data by drawing mode
+   */
+  private Map<String, List<DrawingExportData>> groupDataByDrawingMode(List<DrawingExportData> drawingDataList) {
+    return groupDataByMode(drawingDataList, DrawingExportData::getDrawingMode);
+  }
+
+  private AlertDialog createDeleteUserDataDialog(String dialogMessage, Drawable dialogIcon) {
+    return new AlertDialog.Builder(requireContext())
+        .setTitle("Delete User Data?")
+        .setMessage(dialogMessage)
+        .setIcon(dialogIcon)
+        .setPositiveButton(DELETE_BUTTON, (dialog, which) -> executeUserDataDeletion())
+        .setNegativeButton(CANCEL_BUTTON, null)
+        .create();
+  }
+
+  private void resetUserProgress() {
+
+    for (UserProgressManager.UserProgress progress : unfinishedUsers) {
+      resetSingleUserProgress(progress);
+    }
+
+    requireActivity().runOnUiThread(() -> {
+      showToast("User progress reset successfully");
+      unfinishedUsers.clear();
+      updatePreferencesVisibility();
+    });
+  }
+
+  /**
+   * Generic method to group any data type by drawing mode
+   */
+  private <T> Map<String, List<T>> groupDataByMode(
+      List<T> dataList,
+      Function<T, String> modeGetter
+  ) {
+
+    Map<String, List<T>> dataByMode = new HashMap<>();
+    dataByMode.put(Constants.DRAWING_MODE_NORMAL, new ArrayList<>());
+    dataByMode.put(Constants.DRAWING_MODE_OVERLAY, new ArrayList<>());
+
+    for (T data : dataList) {
+      String mode = modeGetter.apply(data);
+      dataByMode.computeIfAbsent(mode, k -> new ArrayList<>()).add(data);
+    }
+
+    return dataByMode;
+  }
+
+  private void showToast(String message) {
+    requireActivity().runOnUiThread(() -> Toast
+        .makeText(getContext(), message, Toast.LENGTH_LONG)
+        .show());
+  }
+
+  private String createTimestamp() {
+    return new SimpleDateFormat(
+        Constants.EXPORT_DATE_FORMAT,
+                                Locale.getDefault()
+    ).format(new Date());
+  }
+
   private void setupResetUserProgressPreference() {
     if (resetUserProgressPreference != null) {
       resetUserProgressPreference.setTitleColor(getResources().getColor(
@@ -975,13 +1474,12 @@ public class SettingsFragment extends PreferenceFragmentCompat {
           requireContext().getTheme()
       ));
 
-      // Initialize unfinishedUsers list to prevent NPE
       if (unfinishedUsers.isEmpty()) {
         resetUserProgressPreference.setVisible(false);
       }
 
       resetUserProgressPreference.setOnPreferenceClickListener(preference -> {
-        // Show a custom AlertDialog directly
+
         String userNames = buildUnfinishedUsersList();
 
         String dialogMessage = String.format(
@@ -989,12 +1487,10 @@ public class SettingsFragment extends PreferenceFragmentCompat {
             + " allowing them to start fresh.%n%n"
             + "This action will:%n"
             + " • Delete all in-progress drawing data%n"
-            + " • Reset current attempts to zero%n"
-            + " • Allow users to start drawing again%n%n"
-            + "The following users have unfinished drawing sessions:%n%s", userNames
+            + " • Reset current attempts to zero%n%n"
+            + "%s", userNames
         );
 
-        // Get and tint the icon
         Drawable dialogIcon = ResourcesCompat.getDrawable(
             getResources(),
             android.R.drawable.ic_dialog_alert,
@@ -1006,7 +1502,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         }
 
         AlertDialog alertDialog = new AlertDialog.Builder(requireContext())
-            .setTitle("Reset User Progress?")
+            .setTitle("Reset User Progress")
             .setMessage(dialogMessage)
             .setIcon(dialogIcon)
             .setPositiveButton(
@@ -1018,14 +1514,13 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
         alertDialog.show();
 
-        // Apply tint to the positive button
         try {
           int errorColor = getResources().getColor(R.color.error, requireContext().getTheme());
           alertDialog.setOnShowListener(dialog -> alertDialog
               .getButton(DialogInterface.BUTTON_POSITIVE)
               .setTextColor(errorColor));
-        } catch (Exception e) {
-          // Ignore styling errors
+        } catch (Exception ignored) {
+          // Ignore any errors setting the color
         }
 
         return true;
@@ -1034,35 +1529,211 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   }
 
   private String buildUnfinishedUsersList() {
-    StringBuilder userNamesBuilder = new StringBuilder();
-    for (UserProgressManager.UserProgress progress : unfinishedUsers) {
-      // Get details about the session
-      int itemIndex = progress.getItemIndex();
-      int attemptCount = progress.getItemAttempt();
-
-      userNamesBuilder
-          .append(" • ")
-          .append(progress.getUserName())
-          .append(" (Drawing #")
-          .append(itemIndex + 1)
-          .append(", Attempt: ")
-          .append(attemptCount)
-          .append(")\n");
+    if (unfinishedUsers.isEmpty()) {
+      return "No unfinished sessions found.";
     }
-    return userNamesBuilder.toString();
+
+    StringBuilder builder = new StringBuilder();
+    builder.append("The following users have unfinished drawing sessions:\n");
+
+    for (UserProgressManager.UserProgress progress : unfinishedUsers) {
+      String userProgressInfo = buildUserProgressInfo(progress);
+      builder.append(userProgressInfo);
+    }
+
+    builder.append("\nDo you want to reset progress for these users?");
+    return builder.toString();
   }
 
-  private void resetUserProgress() {
-    // Reset progress for all unfinished users
-    for (UserProgressManager.UserProgress progress : unfinishedUsers) {
-      resetSingleUserProgress(progress);
+  private String buildUserProgressInfo(UserProgressManager.UserProgress progress) {
+    UserProgressManager.Session session = UserProgressManager.getSession(
+        requireContext(),
+        progress.getUserId(),
+        progress.getSessionId()
+    );
+
+    SessionInfo sessionInfo = extractSessionInfo(session);
+    ProgressInfo progressInfo = calculateProgressInfo(progress, sessionInfo);
+
+    return String.format(
+        Locale.getDefault(),
+        " • %s:%n" + "   ⸰ Progress: %d/%s (%d/%d)%n" + "   ⸰ Mode: %s%n",
+        progress.getUserName(),
+        progressInfo.currentItemAttempt,
+        sessionInfo.attempts,
+        progressInfo.overallAttempt,
+        progressInfo.totalAttempts,
+        sessionInfo.drawingMode
+    );
+  }
+
+  private SessionInfo extractSessionInfo(UserProgressManager.Session session) {
+    String attempts = UNKNOWN_VALUE;
+    String drawingMode = "normal";
+    int totalImages = 0;
+
+    if (session != null && session.getSettings() != null) {
+      attempts = extractAttempts(session);
+      drawingMode = extractDrawingMode(session);
+      totalImages = extractTotalImages(session);
     }
 
-    // Refresh the UI
-    requireActivity().runOnUiThread(() -> {
-      showToast("User progress reset successfully");
-      unfinishedUsers.clear();
-      updatePreferencesVisibility();
+    if (totalImages == 0) {
+      totalImages = 1;
+    }
+
+    return new SessionInfo(attempts, drawingMode, totalImages);
+  }
+
+  private String extractAttempts(UserProgressManager.Session session) {
+    Object attemptsObj = session.getSettings().get(Constants.DRAWING_KEY_ATTEMPTS);
+    return attemptsObj != null ? attemptsObj.toString() : UNKNOWN_VALUE;
+  }
+
+  private String extractDrawingMode(UserProgressManager.Session session) {
+    Object modeObj = session.getSettings().get(Constants.DRAWING_KEY_MODE);
+    return modeObj != null ? modeObj.toString() : "normal";
+  }
+
+  private void executeUserDataDeletion() {
+
+    executor.execute(() -> {
+      int deletedRows = db
+          .drawingDataDao()
+          .deleteDrawingDataByUserID(Long.parseLong(selectedUserID));
+      if (deletedRows > 0) {
+        requireActivity().runOnUiThread(() -> Toast
+            .makeText(getContext(), "User drawing data deleted", Toast.LENGTH_LONG)
+            .show());
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(requireContext());
+        prefs.edit().remove(KEY_CURRENT_ITEM_ATTEMPT).remove(KEY_CURRENT_ITEM_INDEX).apply();
+      } else {
+        requireActivity().runOnUiThread(() -> Toast
+            .makeText(getContext(), "Failed to delete user drawing data", Toast.LENGTH_LONG)
+            .show());
+      }
+    });
+  }
+
+  private int extractTotalImages(UserProgressManager.Session session) {
+    try {
+      Object selectedImagesObj = session
+          .getSettings()
+          .get(Constants.DRAWING_KEY_SELECTED_IMAGE_IDS);
+      if (selectedImagesObj != null) {
+        return parseSelectedImages(selectedImagesObj);
+      }
+    } catch (Exception ignored) {
+      // Ignore any parsing errors
+    }
+
+    Set<Integer> selectedImages = SelectedImagesManager.getSelectedImages(requireContext());
+    return selectedImages.size();
+  }
+
+  private int parseSelectedImages(Object selectedImagesObj) {
+    if (selectedImagesObj instanceof List) {
+      return ((List<?>) selectedImagesObj).size();
+    } else if (selectedImagesObj.toString().startsWith("[") && selectedImagesObj
+        .toString()
+        .endsWith("]")) {
+      String arrayStr = selectedImagesObj.toString();
+      if (arrayStr.length() > 2) {
+        return arrayStr.split(",").length;
+      }
+    }
+    return 0;
+  }
+
+  private void resetSingleUserProgress(UserProgressManager.UserProgress progress) {
+    long userId = progress.getUserId();
+
+    List<UserProgressManager.Session> unfinishedSessions
+        = UserProgressManager.getUnfinishedSessions(requireContext(), userId);
+
+    for (UserProgressManager.Session session : unfinishedSessions) {
+      resetSession(userId, session.getSessionId());
+    }
+
+    UserProgressManager.clearUserProgress(requireContext(), userId);
+  }
+
+  /**
+   * Process drawing data to add drawing mode information from session settings
+   */
+  private void processDrawingModes(List<DrawingExportData> drawingDataList) {
+    processDataModes(
+        drawingDataList,
+        DrawingExportData::getSessionID,
+        DrawingExportData::getUserID,
+        DrawingExportData::setDrawingMode
+    );
+  }
+
+  /**
+   * Generic method to process any data type for drawing modes
+   */
+  private <T> void processDataModes(
+      List<T> dataList,
+      Function<T, String> sessionIdGetter,
+      ToLongFunction<T> userIdGetter,
+      BiConsumer<T, String> drawingModeSetter
+  ) {
+
+    for (T data : dataList) {
+      String sessionId = sessionIdGetter.apply(data);
+
+      if (sessionId != null) {
+        long userId = userIdGetter.applyAsLong(data);
+        UserProgressManager.Session session = UserProgressManager.getSession(
+            requireContext(),
+            userId,
+            sessionId
+        );
+
+        String drawingMode = extractDrawingModeFromSession(session);
+        drawingModeSetter.accept(data, drawingMode);
+      } else {
+        drawingModeSetter.accept(data, Constants.DRAWING_MODE_NORMAL);
+      }
+    }
+  }
+
+  private String extractDrawingModeFromSession(UserProgressManager.Session session) {
+    if (session != null && session.getSettings() != null) {
+      Object modeObj = session.getSettings().get(Constants.DRAWING_KEY_MODE);
+      return modeObj != null ? modeObj.toString() : Constants.DRAWING_MODE_NORMAL;
+    }
+    return Constants.DRAWING_MODE_NORMAL;
+  }
+
+  /**
+   * Checks for unfinished users during initial load
+   * This is separate from the onResume check to prevent UI jumping
+   */
+  private void checkUnfinishedUsersInitial() {
+    unfinishedUsers = UserProgressManager.getUnfinishedUsers(requireContext(), db);
+
+    if (!unfinishedUsers.isEmpty()) {
+      requireActivity().runOnUiThread(this::updatePreferencesVisibility);
+    }
+  }
+
+  @Override
+  public void onResume() {
+    super.onResume();
+
+    executor.execute(() -> {
+      List<UserProgressManager.UserProgress> newUnfinishedUsers
+          = UserProgressManager.getUnfinishedUsers(requireContext(), db);
+
+      boolean wasEmpty = unfinishedUsers.isEmpty();
+      boolean isEmpty = newUnfinishedUsers.isEmpty();
+
+      if (wasEmpty != isEmpty) {
+        unfinishedUsers = newUnfinishedUsers;
+        requireActivity().runOnUiThread(this::updatePreferencesVisibility);
+      }
     });
   }
 
@@ -1070,7 +1741,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     boolean hasUnfinishedUsers = !unfinishedUsers.isEmpty();
 
     if (hasUnfinishedUsers) {
-      // Show reset progress preference and disable certain categories
+
       if (resetUserProgressPreference != null) {
         resetUserProgressPreference.setVisible(true);
       }
@@ -1083,7 +1754,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         dataManagementCategory.setEnabled(false);
       }
     } else {
-      // Hide reset progress preference and enable all categories
+
       if (resetUserProgressPreference != null) {
         resetUserProgressPreference.setVisible(false);
       }
@@ -1098,62 +1769,421 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     }
   }
 
-  private void resetSingleUserProgress(UserProgressManager.UserProgress progress) {
-    long userId = progress.getUserId();
-
-    // Get all unfinished sessions for this user
-    List<UserProgressManager.Session> unfinishedSessions
-        = UserProgressManager.getUnfinishedSessions(requireContext(), userId);
-
-    // Mark all sessions as finished
-    for (UserProgressManager.Session session : unfinishedSessions) {
-      resetSession(userId, session.getSessionId());
-    }
-
-    // Clear progress in preferences
-    UserProgressManager.clearUserProgress(requireContext(), userId);
-  }
-
   private void resetSession(long userId, String sessionId) {
-    // Mark the session as finished
+
     UserProgressManager.markSessionFinished(requireContext(), userId, sessionId);
 
-    // Delete drawing data for this session from the database
     db.drawingDataDao().deleteUserSessionData(userId, sessionId);
   }
 
-  /**
-   * Checks for unfinished users during initial load
-   * This is separate from the onResume check to prevent UI jumping
-   */
-  private void checkUnfinishedUsersInitial() {
-    unfinishedUsers = UserProgressManager.getUnfinishedUsers(requireContext(), db);
+  private File createExportDirectory() {
+    File exportDir
+        = new File(
+        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+        Constants.SKETCHID_DATA_DIR
+    );
+    if (!exportDir.exists() && !exportDir.mkdirs()) {
+      showToast(Constants.FAILED_EXPORT_MESSAGE);
+      return null;
+    }
+    return exportDir;
+  }
 
-    // Update UI on the main thread if needed
-    if (!unfinishedUsers.isEmpty()) {
-      requireActivity().runOnUiThread(this::updatePreferencesVisibility);
+  private ProgressInfo calculateProgressInfo(
+      UserProgressManager.UserProgress progress,
+      SessionInfo sessionInfo
+  ) {
+    int currentItemIndex = progress.getItemIndex();
+    int currentItemAttempt = progress.getItemAttempt();
+    int attemptsPerImage = parseAttemptsPerImage(sessionInfo.attempts);
+
+    int overallAttempt = (currentItemIndex * attemptsPerImage) + currentItemAttempt;
+    int totalAttempts = sessionInfo.totalImages * attemptsPerImage;
+
+    return new ProgressInfo(currentItemAttempt, overallAttempt, totalAttempts);
+  }
+
+  private int parseAttemptsPerImage(String attempts) {
+    try {
+      if (!attempts.equals(UNKNOWN_VALUE)) {
+        return Integer.parseInt(attempts);
+      }
+    } catch (NumberFormatException ignored) {
+      // Ignore any parsing errors
+    }
+    return 1;
+  }
+
+  private void setupUploadAllDataPreference() {
+    if (uploadAllDataPreference != null) {
+      uploadAllDataPreference.setOnPreferenceClickListener(preference -> {
+        SettingsActivity activity = (SettingsActivity) getActivity();
+        if (activity != null) {
+          activity.showUploadOverlay(true);
+        }
+
+        executor.execute(() -> uploadAllDataToFirebase(activity));
+        return true;
+      });
     }
   }
 
-  @Override
-  public void onResume() {
-    super.onResume();
+  private void uploadAllDataToFirebase(SettingsActivity activity) {
 
-    // Only check for unfinished users if we need to
-    // This prevents UI jumping on each resume
-    executor.execute(() -> {
-      List<UserProgressManager.UserProgress> newUnfinishedUsers
-          = UserProgressManager.getUnfinishedUsers(requireContext(), db);
+    List<User> users = db.userDao().getAllUsers();
+    if (users.isEmpty()) {
+      requireActivity().runOnUiThread(() -> {
+        if (activity != null) {
+          activity.hideUploadOverlay();
+        }
+        showToast("No users found to upload data");
+      });
+      return;
+    }
 
-      // Only update UI if the state has changed
-      boolean wasEmpty = unfinishedUsers.isEmpty();
-      boolean isEmpty = newUnfinishedUsers.isEmpty();
+    File exportDir = createExportDirectory();
+    if (exportDir == null) {
+      requireActivity().runOnUiThread(() -> {
+        if (activity != null) {
+          activity.hideUploadOverlay();
+        }
+      });
+      return;
+    }
 
-      if (wasEmpty != isEmpty) {
-        unfinishedUsers = newUnfinishedUsers;
-        requireActivity().runOnUiThread(this::updatePreferencesVisibility);
+    ContentResolver contentResolver = requireActivity().getContentResolver();
+    FirebaseStorage storage = FirebaseStorage.getInstance();
+    StorageReference storageRef = storage.getReference();
+    AtomicInteger uploadedCount = new AtomicInteger();
+    int totalUsers = users.size();
+    String timestamp = new SimpleDateFormat(
+        Constants.EXPORT_DATE_FORMAT,
+                                            Locale.getDefault()
+    ).format(new Date());
+
+    UploadContext context = new UploadContext(
+        contentResolver,
+                                              storageRef,
+                                              uploadedCount,
+                                              totalUsers,
+                                              timestamp,
+                                              exportDir
+    );
+
+    for (User user : users) {
+      List<DrawingExportData> drawingDataList = db
+          .drawingDataDao()
+          .getAllDrawingDataWithUsersAndImagesByUserID(user.id);
+
+      if (drawingDataList.isEmpty()) {
+        continue;
+      }
+
+      processUserData(user, drawingDataList, context, activity);
+    }
+  }
+
+  private void processUserData(
+      User user,
+      List<DrawingExportData> drawingDataList,
+      UploadContext context,
+      SettingsActivity activity
+  ) {
+
+    processDrawingModes(drawingDataList);
+
+    Map<String, List<DrawingExportData>> dataByMode = groupDataByDrawingMode(drawingDataList);
+
+    // Create user directory with timestamp
+    String userDirName = user.name + "_" + context.timestamp;
+    File userDir = new File(context.exportDir, userDirName);
+    if (!userDir.exists() && !userDir.mkdirs()) {
+      showToast("Failed to create user directory for upload: " + user.name);
+      return;
+    }
+
+    for (Map.Entry<String, List<DrawingExportData>> entry : dataByMode.entrySet()) {
+      String mode = entry.getKey();
+      List<DrawingExportData> modeData = entry.getValue();
+
+      if (!shouldSkipModeData(modeData)) {
+        File modeDir = createModeDirectory(userDir, mode);
+        if (modeDir != null) {
+          processUploadDataForMode(user, modeData, modeDir, mode, userDirName, context, activity);
+        } else {
+          showToast("Failed to create mode directory for upload: " + mode);
+        }
+      }
+    }
+  }
+
+  private void processUploadDataForMode(
+      User user,
+      List<DrawingExportData> modeData,
+      File modeDir,
+      String mode,
+      String userDirName,
+      UploadContext context,
+      SettingsActivity activity
+  ) {
+    // Group data by image
+    Map<String, List<DrawingExportData>> dataByImage = groupDrawingDataByImage(modeData);
+
+    UploadImageParams params = new UploadImageParams(modeDir, mode, userDirName, context, activity);
+
+    for (Map.Entry<String, List<DrawingExportData>> imageEntry : dataByImage.entrySet()) {
+      String imageName = imageEntry.getKey();
+      List<DrawingExportData> imageData = imageEntry.getValue();
+
+      processUploadDataForImage(user, imageName, imageData, params);
+    }
+  }
+
+  private void processUploadDataForImage(
+      User user,
+      String imageName,
+      List<DrawingExportData> imageData,
+      UploadImageParams params
+  ) {
+    // Convert to lowercase and add underscores
+    String formattedImageName = imageName.toLowerCase();
+    String fileName = formattedImageName + "_drawing_data.csv";
+
+    File file = new File(params.modeDir, fileName);
+    Uri uploadFileUri = Uri.fromFile(file);
+
+    try (
+        OutputStream outputStream = params.context.contentResolver.openOutputStream(uploadFileUri)
+    ) {
+      if (outputStream != null) {
+        writeDrawingDataToStream(outputStream, imageData);
+
+        if (params.mode.equals(Constants.DRAWING_MODE_NORMAL)) {
+          // Upload with new path structure: SketchIDData/username_timestamp/mode/filename
+          String firebasePath = SKETCHID_DATA_PATH
+                                + params.userDirName
+                                + FIREBASE_PATH_SEPARATOR
+                                + params.mode
+                                + FIREBASE_PATH_SEPARATOR
+                                + fileName;
+          uploadFileToFirebase(
+              user,
+              firebasePath,
+              uploadFileUri,
+              params.context.storageRef,
+              params.context.uploadedCount,
+              params.context.totalUsers,
+              params.activity
+          );
+        }
+      }
+    } catch (IOException e) {
+      showToast("Failed to export data for user: " + user.name + ", image: " + imageName);
+    }
+  }
+
+  private void uploadFileToFirebase(
+      User user,
+      String firebasePath,
+      Uri uploadFileUri,
+      StorageReference storageRef,
+      AtomicInteger uploadedCount,
+      int totalUsers,
+      SettingsActivity activity
+  ) {
+    StorageReference fileRef = storageRef.child(firebasePath);
+    UploadTask uploadTask = fileRef.putFile(uploadFileUri);
+
+    uploadTask.addOnSuccessListener(taskSnapshot -> {
+      uploadedCount.getAndIncrement();
+      if (uploadedCount.get() == totalUsers) {
+        requireActivity().runOnUiThread(() -> {
+          if (activity != null) {
+            activity.hideUploadOverlay();
+          }
+          showExportMessage(getString(R.string.upload_complete));
+        });
+      }
+    }).addOnFailureListener(e -> {
+      uploadedCount.getAndIncrement();
+      if (uploadedCount.get() == totalUsers) {
+        requireActivity().runOnUiThread(() -> {
+          if (activity != null) {
+            activity.hideUploadOverlay();
+          }
+          showExportMessage(getString(R.string.upload_failed));
+        });
+      } else {
+        showToast("Failed to upload data for user: " + user.name);
       }
     });
+  }
+
+  /**
+   * Process gravity data to add drawing mode information from session settings
+   */
+  private void processGravityDrawingModes(List<GravityExportData> gravityDataList) {
+    processDataModes(
+        gravityDataList,
+        GravityExportData::getSessionId,
+        GravityExportData::getUserId,
+        GravityExportData::setDrawingMode
+    );
+  }
+
+  /**
+   * Process gyroscope data to add drawing mode information from session settings
+   */
+  private void processGyroscopeDrawingModes(List<GyroscopeExportData> gyroscopeDataList) {
+    processDataModes(
+        gyroscopeDataList,
+        GyroscopeExportData::getSessionId,
+        GyroscopeExportData::getUserId,
+        GyroscopeExportData::setDrawingMode
+    );
+  }
+
+  /**
+   * Process magnetic field data to add drawing mode information from session settings
+   */
+  private void processMagneticFieldDrawingModes(List<MagneticFieldExportData> magneticFieldDataList) {
+    processDataModes(
+        magneticFieldDataList,
+        MagneticFieldExportData::getSessionId,
+        MagneticFieldExportData::getUserId,
+        MagneticFieldExportData::setDrawingMode
+    );
+  }
+
+  /**
+   * Process magnetic field baseline data to add drawing mode information from session settings
+   */
+  private void processMagneticFieldBaselineDrawingModes(List<MagneticFieldBaselineExportData> magneticFieldBaselineDataList) {
+    processDataModes(
+        magneticFieldBaselineDataList,
+        MagneticFieldBaselineExportData::getSessionId,
+        MagneticFieldBaselineExportData::getUserId,
+        MagneticFieldBaselineExportData::setDrawingMode
+    );
+  }
+
+  /**
+   * Process accelerometer data to add drawing mode information from session settings
+   */
+  private void processAccelerometerDrawingModes(List<AccelerometerExportData> accelerometerDataList) {
+    processDataModes(
+        accelerometerDataList,
+        AccelerometerExportData::getSessionId,
+        AccelerometerExportData::getUserId,
+        AccelerometerExportData::setDrawingMode
+    );
+  }
+
+  /**
+   * Group gravity data by drawing mode
+   */
+  private Map<String, List<GravityExportData>> groupGravityDataByDrawingMode(List<GravityExportData> gravityDataList) {
+    return groupDataByMode(gravityDataList, GravityExportData::getDrawingMode);
+  }
+
+  /**
+   * Group gyroscope data by drawing mode
+   */
+  private Map<String, List<GyroscopeExportData>> groupGyroscopeDataByDrawingMode(List<GyroscopeExportData> gyroscopeDataList) {
+    return groupDataByMode(gyroscopeDataList, GyroscopeExportData::getDrawingMode);
+  }
+
+  /**
+   * Group magnetic field data by drawing mode
+   */
+  private Map<String, List<MagneticFieldExportData>> groupMagneticFieldDataByDrawingMode(List<MagneticFieldExportData> magneticFieldDataList) {
+    return groupDataByMode(magneticFieldDataList, MagneticFieldExportData::getDrawingMode);
+  }
+
+  /**
+   * Group magnetic field baseline data by drawing mode
+   */
+  private Map<String, List<MagneticFieldBaselineExportData>> groupMagneticFieldBaselineDataByDrawingMode(
+      List<MagneticFieldBaselineExportData> magneticFieldBaselineDataList
+  ) {
+    return groupDataByMode(
+        magneticFieldBaselineDataList,
+        MagneticFieldBaselineExportData::getDrawingMode
+    );
+  }
+
+  /**
+   * Group accelerometer data by drawing mode
+   */
+  private Map<String, List<AccelerometerExportData>> groupAccelerometerDataByDrawingMode(List<AccelerometerExportData> accelerometerDataList) {
+    return groupDataByMode(accelerometerDataList, AccelerometerExportData::getDrawingMode);
+  }
+
+  @FunctionalInterface
+  private interface SensorDataWriter<T> {
+    void writeData(OutputStream outputStream, List<T> data)
+    throws IOException;
+  }
+
+  private static class ExportDataBundle {
+    final Map<String, List<DrawingExportData>> drawingDataByMode;
+    final Map<String, List<GravityExportData>> gravityDataByMode;
+    final Map<String, List<GyroscopeExportData>> gyroscopeDataByMode;
+    final Map<String, List<MagneticFieldExportData>> magneticFieldDataByMode;
+    final Map<String, List<MagneticFieldBaselineExportData>> magneticFieldBaselineDataByMode;
+    final Map<String, List<AccelerometerExportData>> accelerometerDataByMode;
+
+    ExportDataBundle(
+        Map<String, List<DrawingExportData>> drawingDataByMode,
+        Map<String, List<GravityExportData>> gravityDataByMode,
+        Map<String, List<GyroscopeExportData>> gyroscopeDataByMode,
+        Map<String, List<MagneticFieldExportData>> magneticFieldDataByMode,
+        Map<String, List<MagneticFieldBaselineExportData>> magneticFieldBaselineDataByMode,
+        Map<String, List<AccelerometerExportData>> accelerometerDataByMode
+    ) {
+      this.drawingDataByMode = drawingDataByMode;
+      this.gravityDataByMode = gravityDataByMode;
+      this.gyroscopeDataByMode = gyroscopeDataByMode;
+      this.magneticFieldDataByMode = magneticFieldDataByMode;
+      this.magneticFieldBaselineDataByMode = magneticFieldBaselineDataByMode;
+      this.accelerometerDataByMode = accelerometerDataByMode;
+    }
+
+    boolean isEmpty() {
+      return drawingDataByMode.values().stream().allMatch(List::isEmpty)
+             && gravityDataByMode
+                 .values()
+                 .stream()
+                 .allMatch(List::isEmpty)
+             && gyroscopeDataByMode.values().stream().allMatch(List::isEmpty)
+             && magneticFieldDataByMode.values().stream().allMatch(List::isEmpty)
+             && magneticFieldBaselineDataByMode.values().stream().allMatch(List::isEmpty)
+             && accelerometerDataByMode.values().stream().allMatch(List::isEmpty);
+    }
+  }
+
+  private static class SessionInfo {
+    final String attempts;
+    final String drawingMode;
+    final int totalImages;
+
+    SessionInfo(String attempts, String drawingMode, int totalImages) {
+      this.attempts = attempts;
+      this.drawingMode = drawingMode;
+      this.totalImages = totalImages;
+    }
+  }
+
+  private static class ProgressInfo {
+    final int currentItemAttempt;
+    final int overallAttempt;
+    final int totalAttempts;
+
+    ProgressInfo(int currentItemAttempt, int overallAttempt, int totalAttempts) {
+      this.currentItemAttempt = currentItemAttempt;
+      this.overallAttempt = overallAttempt;
+      this.totalAttempts = totalAttempts;
+    }
   }
 
   /**
@@ -1181,6 +2211,31 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       this.totalUsers = totalUsers;
       this.timestamp = timestamp;
       this.exportDir = exportDir;
+    }
+  }
+
+  /**
+   * Parameter object for upload image processing
+   */
+  private static class UploadImageParams {
+    final File modeDir;
+    final String mode;
+    final String userDirName;
+    final UploadContext context;
+    final SettingsActivity activity;
+
+    UploadImageParams(
+        File modeDir,
+        String mode,
+        String userDirName,
+        UploadContext context,
+        SettingsActivity activity
+    ) {
+      this.modeDir = modeDir;
+      this.mode = mode;
+      this.userDirName = userDirName;
+      this.context = context;
+      this.activity = activity;
     }
   }
 }

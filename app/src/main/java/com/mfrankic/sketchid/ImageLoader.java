@@ -31,7 +31,7 @@ public class ImageLoader {
    * @param context   The context
    */
   public static void load(ImageView imageView, TextView errorText, Image image, Context context) {
-    // Reset error text visibility
+
     if (errorText != null) {
       errorText.setVisibility(android.view.View.GONE);
     }
@@ -113,6 +113,50 @@ public class ImageLoader {
       showErrorImage(imageView, errorText, "Permission denied", context);
     } catch (Exception e) {
       showErrorImage(imageView, errorText, "Invalid image", context);
+    }
+  }
+
+  /**
+   * Simplified method to load an image into an ImageView without error text
+   *
+   * @param context   The context
+   * @param item      The item to load
+   * @param imageView The ImageView to load the image into
+   */
+  public static void loadImageIntoView(Context context, Item item, ImageView imageView) {
+    if (item == null || imageView == null) {
+      return;
+    }
+
+    if (item.getSource().equals(SOURCE_DEFAULT)) {
+      try {
+        int resourceId = Integer.parseInt(item.getPath());
+        Glide
+            .with(context)
+            .load(resourceId)
+            .transition(DrawableTransitionOptions.withCrossFade())
+            .into(imageView);
+      } catch (NumberFormatException e) {
+
+        Glide.with(context).load(android.R.drawable.ic_menu_gallery).into(imageView);
+      }
+    } else {
+      try {
+        Uri uri = Uri.parse(item.getPath());
+        context
+            .getContentResolver()
+            .takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+
+        Glide
+            .with(context)
+            .load(uri)
+            .transition(DrawableTransitionOptions.withCrossFade())
+            .error(android.R.drawable.ic_menu_gallery)
+            .into(imageView);
+      } catch (Exception e) {
+
+        Glide.with(context).load(android.R.drawable.ic_menu_gallery).into(imageView);
+      }
     }
   }
 } 

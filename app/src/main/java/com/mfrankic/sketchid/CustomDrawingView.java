@@ -48,8 +48,90 @@ public class CustomDrawingView extends View {
   }
 
   public interface OnStrokeListener {
-    void onStroke(float x, float y, long timestamp, String action);
+    void onStroke(
+        float x,
+        float y,
+        long timestamp,
+        String action,
+        float size,
+        float pressure,
+        float orientation
+    );
+  }  @Override
+  public boolean onTouchEvent(MotionEvent event) {
+    if (onStrokeListener == null) {
+      Log.w(
+          "CustomDrawingView",
+          "onStrokeListener is null; touch events are ignored. Drawing is disabled."
+      );
+      return false;
+    }
+
+    handleMotionEventBatchedData(event);
+
+    final float touchX = event.getX();
+    final float touchY = event.getY();
+    final long timestamp = event.getEventTime();
+    final float size = event.getSize();
+    final float pressure = event.getPressure();
+    final float orientation = event.getOrientation();
+
+    float normalizedX = touchX / getWidth();
+    float normalizedY = touchY / getHeight();
+
+    if (normalizedX < 0.0f || normalizedX > 1.0f || normalizedY < 0.0f || normalizedY > 1.0f) {
+      return false;
+    }
+
+    switch (event.getAction()) {
+      case MotionEvent.ACTION_DOWN:
+        drawPath.moveTo(touchX, touchY);
+        onStrokeListener.onStroke(
+            normalizedX,
+            normalizedY,
+            timestamp,
+            "ACTION_DOWN",
+            size,
+            pressure,
+            orientation
+        );
+        break;
+      case MotionEvent.ACTION_MOVE:
+        drawPath.lineTo(touchX, touchY);
+        onStrokeListener.onStroke(
+            normalizedX,
+            normalizedY,
+            timestamp,
+            "ACTION_MOVE",
+            size,
+            pressure,
+            orientation
+        );
+        break;
+      case MotionEvent.ACTION_UP:
+        drawPath.lineTo(touchX, touchY);
+        drawCanvas.drawPath(drawPath, drawPaint);
+        onStrokeListener.onStroke(
+            normalizedX,
+            normalizedY,
+            timestamp,
+            "ACTION_UP",
+            size,
+            pressure,
+            orientation
+        );
+        drawPath.reset();
+        performClick();
+        break;
+      default:
+        return false;
+    }
+
+    invalidate();
+    return true;
   }
+
+
 
   @Override
   protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -71,6 +153,10 @@ public class CustomDrawingView extends View {
     super.onSizeChanged(w, h, oldW, oldH);
     canvasBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
     drawCanvas = new Canvas(canvasBitmap);
+    setupGridBackground();
+  }
+
+  private void setupGridBackground() {
     Drawable grid = ResourcesCompat.getDrawable(getResources(), R.drawable.grid, null);
     if (grid != null) {
       grid.setTint(ContextCompat.getColor(getContext(), R.color.onSurface));
@@ -91,53 +177,6 @@ public class CustomDrawingView extends View {
     return true;
   }
 
-  @Override
-  public boolean onTouchEvent(MotionEvent event) {
-    if (onStrokeListener == null) {
-      Log.w(
-          "CustomDrawingView",
-          "onStrokeListener is null; touch events are ignored. Drawing is disabled."
-      );
-      return false;
-    }
-
-    handleMotionEventBatchedData(event);
-
-    final float touchX = event.getX();
-    final float touchY = event.getY();
-    final long timestamp = event.getEventTime();
-
-    float normalizedX = touchX / getWidth();
-    float normalizedY = touchY / getHeight();
-
-    if (normalizedX < 0.0f || normalizedX > 1.0f || normalizedY < 0.0f || normalizedY > 1.0f) {
-      return false;
-    }
-
-    switch (event.getAction()) {
-      case MotionEvent.ACTION_DOWN:
-        drawPath.moveTo(touchX, touchY);
-        onStrokeListener.onStroke(normalizedX, normalizedY, timestamp, "ACTION_DOWN");
-        break;
-      case MotionEvent.ACTION_MOVE:
-        drawPath.lineTo(touchX, touchY);
-        onStrokeListener.onStroke(normalizedX, normalizedY, timestamp, "ACTION_MOVE");
-        break;
-      case MotionEvent.ACTION_UP:
-        drawPath.lineTo(touchX, touchY);
-        drawCanvas.drawPath(drawPath, drawPaint);
-        onStrokeListener.onStroke(normalizedX, normalizedY, timestamp, "ACTION_UP");
-        drawPath.reset();
-        performClick();
-        break;
-      default:
-        return false;
-    }
-
-    invalidate();
-    return true;
-  }
-
   private void handleMotionEventBatchedData(MotionEvent event) {
     final int historySize = event.getHistorySize();
 
@@ -145,6 +184,9 @@ public class CustomDrawingView extends View {
       final float historicalX = event.getHistoricalX(0, i);
       final float historicalY = event.getHistoricalY(0, i);
       final long historicalTime = event.getHistoricalEventTime(i);
+      final float historicalSize = event.getHistoricalSize(0, i);
+      final float historicalPressure = event.getHistoricalPressure(0, i);
+      final float historicalOrientation = event.getHistoricalOrientation(0, i);
 
       float normalizedX = historicalX / getWidth();
       float normalizedY = historicalY / getHeight();
@@ -154,9 +196,16 @@ public class CustomDrawingView extends View {
       }
 
       drawPath.lineTo(historicalX, historicalY);
-      onStrokeListener.onStroke(normalizedX, normalizedY, historicalTime, "ACTION_MOVE");
+      onStrokeListener.onStroke(
+          normalizedX,
+          normalizedY,
+          historicalTime,
+          "ACTION_MOVE",
+          historicalSize,
+          historicalPressure,
+          historicalOrientation
+      );
     }
   }
-
 
 }

@@ -23,7 +23,7 @@ public class DraggableImageButton extends AppCompatImageButton {
   }
 
   private void init() {
-    // Set haptic feedback for better user experience
+
     setHapticFeedbackEnabled(true);
   }
 
@@ -68,15 +68,14 @@ public class DraggableImageButton extends AppCompatImageButton {
    */
   @Override
   public boolean performClick() {
-    // Call the super implementation first to handle standard click operations
+
     boolean handled = super.performClick();
 
-    // If we have a drag listener, notify it that a drag should start
     if (dragStartListener != null) {
-      // Announce drag start for accessibility
+
       announceForAccessibility(getResources().getString(R.string.drag_started));
       dragStartListener.onDragStart(this);
-      // Consider the event handled
+
       return true;
     }
 

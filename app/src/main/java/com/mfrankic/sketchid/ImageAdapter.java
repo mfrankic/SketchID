@@ -41,12 +41,11 @@ public class ImageAdapter extends ListAdapter<Image, ImageAdapter.ImageViewHolde
     this.optionsListener = optionsListener;
     this.longClickListener = longClickListener;
 
-    // Initialize selection manager
     this.selectionManager = new SelectionManager<>(pos -> {
       if (pos >= 0) {
         notifyItemChanged(pos);
       } else {
-        // When we need to update all items, use a more specific range notification
+
         int count = getCurrentList().size();
         if (count > 0) {
           notifyItemRangeChanged(0, count);
@@ -58,10 +57,9 @@ public class ImageAdapter extends ListAdapter<Image, ImageAdapter.ImageViewHolde
   }
 
   public void updateImages(List<Image> newImages) {
-    // Validate selections against new list
+
     selectionManager.validateSelectionsAgainst(newImages);
 
-    // Update displayed items
     submitList(new ArrayList<>(newImages));
   }
 
@@ -104,7 +102,6 @@ public class ImageAdapter extends ListAdapter<Image, ImageAdapter.ImageViewHolde
     setupOptionsButton(holder, image);
     setupClickListeners(holder, image);
 
-    // Use ImageLoader utility to load the image
     ImageLoader.load(holder.imageView, holder.errorText, image, context);
   }
 
@@ -179,7 +176,7 @@ public class ImageAdapter extends ListAdapter<Image, ImageAdapter.ImageViewHolde
   }
 
   private void setupClickListeners(ImageViewHolder holder, Image image) {
-    // Setup click listener
+
     holder.itemView.setOnClickListener(v -> {
       if (multiSelectMode) {
         toggleImageSelection(image);
@@ -188,7 +185,6 @@ public class ImageAdapter extends ListAdapter<Image, ImageAdapter.ImageViewHolde
       }
     });
 
-    // Setup long-press listener
     holder.itemView.setOnLongClickListener(v -> longClickListener.onImageLongClick(image));
   }
 
