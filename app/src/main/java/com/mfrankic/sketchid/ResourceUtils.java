@@ -38,16 +38,16 @@ public class ResourceUtils {
   private static void initializeDrawableMap() {
 
     drawableResourceMap.put("arrow", R.drawable.arrow);
+    drawableResourceMap.put("checkmark", R.drawable.checkmark);
     drawableResourceMap.put("crown", R.drawable.crown);
     drawableResourceMap.put("envelope", R.drawable.envelope);
     drawableResourceMap.put("grid", R.drawable.grid);
-    drawableResourceMap.put("house", R.drawable.house);
+    drawableResourceMap.put("heart", R.drawable.heart);
     drawableResourceMap.put("lightbulb", R.drawable.lightbulb);
-    drawableResourceMap.put("moon", R.drawable.moon);
     drawableResourceMap.put("smiley", R.drawable.smiley);
     drawableResourceMap.put("star", R.drawable.star);
-    drawableResourceMap.put("sun", R.drawable.sun);
     drawableResourceMap.put("umbrella", R.drawable.umbrella);
+    drawableResourceMap.put("upload", R.drawable.upload);
   }
 
   /**

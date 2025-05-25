@@ -325,6 +325,11 @@ public class ResourceUtilsTest {
         ResourceUtils.getDrawableResourceByName("arrow")
     );
     assertNotEquals(
+        "Checkmark resource should be found",
+        0,
+        ResourceUtils.getDrawableResourceByName("checkmark")
+    );
+    assertNotEquals(
         "Crown resource should be found",
         0,
         ResourceUtils.getDrawableResourceByName("crown")
@@ -340,19 +345,14 @@ public class ResourceUtilsTest {
         ResourceUtils.getDrawableResourceByName("grid")
     );
     assertNotEquals(
-        "House resource should be found",
+        "Heart resource should be found",
         0,
-        ResourceUtils.getDrawableResourceByName("house")
+        ResourceUtils.getDrawableResourceByName("heart")
     );
     assertNotEquals(
         "Lightbulb resource should be found",
         0,
         ResourceUtils.getDrawableResourceByName("lightbulb")
-    );
-    assertNotEquals(
-        "Moon resource should be found",
-        0,
-        ResourceUtils.getDrawableResourceByName("moon")
     );
     assertNotEquals(
         "Smiley resource should be found",
@@ -365,14 +365,14 @@ public class ResourceUtilsTest {
         ResourceUtils.getDrawableResourceByName("star")
     );
     assertNotEquals(
-        "Sun resource should be found",
-        0,
-        ResourceUtils.getDrawableResourceByName("sun")
-    );
-    assertNotEquals(
         "Umbrella resource should be found",
         0,
         ResourceUtils.getDrawableResourceByName("umbrella")
+    );
+    assertNotEquals(
+        "Upload resource should be found",
+        0,
+        ResourceUtils.getDrawableResourceByName("upload")
     );
   }
 
@@ -443,16 +443,16 @@ public class ResourceUtilsTest {
 
     String[] knownResources = {
         "arrow",
+        "checkmark",
         "crown",
         "envelope",
         "grid",
-        "house",
+        "heart",
         "lightbulb",
-        "moon",
         "smiley",
         "star",
-        "sun",
-        "umbrella"
+        "umbrella",
+        "upload"
     };
 
     for (String resourceName : knownResources) {
@@ -575,16 +575,16 @@ public class ResourceUtilsTest {
 
     String[] knownResources = {
         "arrow",
+        "checkmark",
         "crown",
         "envelope",
         "grid",
-        "house",
+        "heart",
         "lightbulb",
-        "moon",
         "smiley",
         "star",
-        "sun",
-        "umbrella"
+        "umbrella",
+        "upload"
     };
 
     for (String resourceName : knownResources) {
@@ -599,16 +599,16 @@ public class ResourceUtilsTest {
 
     String[] knownResources = {
         "arrow",
+        "checkmark",
         "crown",
         "envelope",
         "grid",
-        "house",
+        "heart",
         "lightbulb",
-        "moon",
         "smiley",
         "star",
-        "sun",
-        "umbrella"
+        "umbrella",
+        "upload"
     };
 
     java.util.Set<Integer> resourceIds = new java.util.HashSet<>();

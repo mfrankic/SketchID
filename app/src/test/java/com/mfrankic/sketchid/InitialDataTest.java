@@ -140,15 +140,15 @@ public class InitialDataTest {
 
     // Verify specific expected images are present
     assertTrue("Should contain Arrow image", imageNames.contains("Arrow"));
+    assertTrue("Should contain Checkmark image", imageNames.contains("Checkmark"));
     assertTrue("Should contain Crown image", imageNames.contains("Crown"));
     assertTrue("Should contain Envelope image", imageNames.contains("Envelope"));
-    assertTrue("Should contain House image", imageNames.contains("House"));
+    assertTrue("Should contain Heart image", imageNames.contains("Heart"));
     assertTrue("Should contain Lightbulb image", imageNames.contains("Lightbulb"));
-    assertTrue("Should contain Moon image", imageNames.contains("Moon"));
     assertTrue("Should contain Smiley image", imageNames.contains("Smiley"));
     assertTrue("Should contain Star image", imageNames.contains("Star"));
-    assertTrue("Should contain Sun image", imageNames.contains("Sun"));
     assertTrue("Should contain Umbrella image", imageNames.contains("Umbrella"));
+    assertTrue("Should contain Upload image", imageNames.contains("Upload"));
   }
 
   @Test
@@ -329,15 +329,15 @@ public class InitialDataTest {
     // Test that images are in expected alphabetical-ish order
     String[] expectedOrder = {
         "Arrow",
+        "Checkmark",
         "Crown",
         "Envelope",
-        "House",
+        "Heart",
         "Lightbulb",
-        "Moon",
         "Smiley",
         "Star",
-        "Sun",
-        "Umbrella"
+        "Umbrella",
+        "Upload"
     };
 
     assertEquals("Should have expected number of images", expectedOrder.length, images.size());

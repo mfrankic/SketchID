@@ -160,6 +160,7 @@ public class DraggableImageButtonTest {
     boolean result = draggableButton.onTouchEvent(moveEvent);
 
     // ACTION_MOVE should delegate to super, not trigger drag
+    assertNotNull("Result should not be null", Boolean.valueOf(result));
     verify(mockDragListener, never()).onDragStart(any(View.class));
 
     moveEvent.recycle();
@@ -174,6 +175,7 @@ public class DraggableImageButtonTest {
     boolean result = draggableButton.onTouchEvent(upEvent);
 
     // ACTION_UP should delegate to super, not trigger drag
+    assertNotNull("Result should not be null", Boolean.valueOf(result));
     verify(mockDragListener, never()).onDragStart(any(View.class));
 
     upEvent.recycle();
@@ -188,6 +190,7 @@ public class DraggableImageButtonTest {
     boolean result = draggableButton.onTouchEvent(cancelEvent);
 
     // ACTION_CANCEL should delegate to super, not trigger drag
+    assertNotNull("Result should not be null", Boolean.valueOf(result));
     verify(mockDragListener, never()).onDragStart(any(View.class));
 
     cancelEvent.recycle();

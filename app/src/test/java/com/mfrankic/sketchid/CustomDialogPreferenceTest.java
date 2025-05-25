@@ -39,8 +39,6 @@ public class CustomDialogPreferenceTest {
   @Mock
   private TextView mockTitleView;
 
-  private CustomDialogPreference customDialogPreference;
-
   @Before
   public void setUp() {
     // Since we can't easily create an actual CustomDialogPreference in unit tests

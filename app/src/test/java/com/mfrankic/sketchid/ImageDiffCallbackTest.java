@@ -108,6 +108,8 @@ public class ImageDiffCallbackTest {
     try {
       boolean result = imageDiffCallback.areContentsTheSame(imageWithNulls1, imageWithNulls2);
       // If we reach here, the method handled nulls gracefully
+      // The result can be either true or false depending on Image.equals() implementation
+      assertNotNull("Result should not be null", Boolean.valueOf(result));
       assertTrue("Method should handle null fields gracefully", true);
     } catch (NullPointerException e) {
       // If NPE is thrown, that's also a valid test result showing the limitation

@@ -52,15 +52,16 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
-import java.util.function.Predicate;
 import java.util.function.ToLongFunction;
 
 public class SettingsFragment extends PreferenceFragmentCompat {
 
   private static final String DIALOG_PREFERENCE_KEY = "dialog_preference_key";
   private static final String DIALOG_RESULT_KEY = "dialog_result";
-  private static final String MODE_PREFIX = "mode_";
   private static final String UNKNOWN_VALUE = "unknown";
+  private static final String UNKNOWN_IMAGE = "unknown_image";
+  private static final String SKETCHID_DATA_PATH = "SketchIDData/";
+  private static final String FIREBASE_PATH_SEPARATOR = "/";
 
   private EditTextPreference newUserPreference;
   private EditTextPreference drawingAttemptsPreference;
@@ -477,29 +478,12 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     }
   }
 
-  private boolean exportDataToCSV(boolean silent) {
-    if (!isValidUserForExport()) {
-      return false;
-    }
-
-    File exportDir = createExportDirectory();
-    if (exportDir == null) {
-      return false;
-    }
-
-    ExportDataBundle dataBundle = retrieveAndProcessAllData();
-    if (dataBundle.isEmpty()) {
-      showExportMessage(getString(R.string.export_no_data));
-      return false;
-    }
-
-    boolean allExported = exportAllDataTypes(dataBundle, exportDir);
-
-    if (allExported && !silent) {
-      showExportMessage(getString(R.string.export_success_location));
-    }
-
-    return allExported;
+  private String createDeleteUserDataMessage() {
+    return String.format(
+        "Are you sure you want to delete drawing data for "
+        + "user: %s?%n%nThis will remove all "
+        + "drawing history but keep the user profile.", userListPreference.getEntry()
+    );
   }
 
   private boolean isValidUserForExport() {
@@ -545,314 +529,567 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     );
   }
 
-  private boolean exportAllDataTypes(ExportDataBundle dataBundle, File exportDir) {
-    ContentResolver contentResolver = requireActivity().getContentResolver();
-    boolean allExported = true;
+  private void uploadDataToFirebase(SettingsActivity activity) {
+    boolean success = exportDataToCSV(true);
+    if (!success || fileUri == null) {
+      handleUploadFailure(activity);
+      return;
+    }
 
-    allExported &= exportDrawingData(dataBundle.drawingDataByMode, exportDir, contentResolver);
-    allExported &= exportGravityData(dataBundle.gravityDataByMode, exportDir, contentResolver);
-    allExported &= exportGyroscopeData(dataBundle.gyroscopeDataByMode, exportDir, contentResolver);
-    allExported &= exportMagneticFieldData(
-        dataBundle.magneticFieldDataByMode,
-        exportDir,
-        contentResolver
-    );
-    allExported &= exportMagneticFieldBaselineData(
-        dataBundle.magneticFieldBaselineDataByMode,
-        exportDir,
-        contentResolver
-    );
-    allExported &= exportAccelerometerData(
-        dataBundle.accelerometerDataByMode,
-        exportDir,
-        contentResolver
-    );
+    FirebaseStorage storage = FirebaseStorage.getInstance();
+    StorageReference storageRef = storage.getReference();
+
+    // Extract the file path from the fileUri to maintain the new directory structure
+    String filePath = fileUri.getPath();
+    if (filePath != null && filePath.contains(SKETCHID_DATA_PATH)) {
+      uploadFileToFirebaseStorage(activity, storageRef, filePath);
+    } else {
+      handleUploadFailure(activity);
+    }
+
+    fileUri = null;
+  }
+
+  private void handleUploadFailure(SettingsActivity activity) {
+    requireActivity().runOnUiThread(() -> {
+      if (activity != null) {
+        activity.hideUploadOverlay();
+      }
+      showExportMessage(getString(R.string.upload_failed));
+    });
+  }
+
+  private void uploadFileToFirebaseStorage(
+      SettingsActivity activity,
+      StorageReference storageRef,
+      String filePath
+  ) {
+    // Extract the relative path from SketchIDData onwards
+    String relativePath = filePath.substring(filePath.indexOf(SKETCHID_DATA_PATH));
+    StorageReference fileRef = storageRef.child(relativePath);
+
+    UploadTask uploadTask = fileRef.putFile(fileUri);
+    uploadTask
+        .addOnSuccessListener(taskSnapshot -> handleUploadSuccess(activity))
+        .addOnFailureListener(e -> handleUploadFailure(activity));
+  }
+
+  private void handleUploadSuccess(SettingsActivity activity) {
+    requireActivity().runOnUiThread(() -> {
+      if (activity != null) {
+        activity.hideUploadOverlay();
+      }
+      showExportMessage(getString(R.string.upload_complete));
+    });
+  }
+
+  private boolean exportDataToCSV(boolean silent) {
+    if (!isValidUserForExport()) {
+      return false;
+    }
+
+    File exportDir = createExportDirectory();
+    if (exportDir == null) {
+      return false;
+    }
+
+    ExportDataBundle dataBundle = retrieveAndProcessAllData();
+    if (dataBundle.isEmpty()) {
+      showExportMessage(getString(R.string.export_no_data));
+      return false;
+    }
+
+    boolean allExported = exportAllDataTypesNewStructure(dataBundle, exportDir);
+
+    if (allExported && !silent) {
+      showExportMessage(getString(R.string.export_success_location));
+    }
 
     return allExported;
   }
 
-  private boolean exportDrawingData(
-      Map<String, List<DrawingExportData>> dataByMode,
-      File exportDir,
-      ContentResolver contentResolver
-  ) {
-
-    return exportGenericData(
-        dataByMode,
-        exportDir,
-        contentResolver,
-        Constants.DRAWING_DATA_PREFIX,
-        (outputStream, data) -> {
-          outputStream.write(Constants.COLUMN_HEADERS.getBytes());
-          for (DrawingExportData item : data) {
-            String row = String.format(
-                Locale.getDefault(),
-                Constants.FILE_EXPORT_PATTERN,
-                item.getId(),
-                item.getUserID(),
-                item.getUserName(),
-                item.getAttempt(),
-                item.getTime(),
-                item.getX(),
-                item.getY(),
-                item.getAction(),
-                item.getItemType(),
-                item.getImageID(),
-                item.getImageName(),
-                item.getDrawingMode(),
-                item.getSize(),
-                item.getPressure(),
-                item.getOrientation()
-            );
-            outputStream.write(row.getBytes());
-          }
-        },
-        mode -> mode.equals(Constants.DRAWING_MODE_NORMAL)
-    );
-  }
-
-  private boolean exportGravityData(
-      Map<String, List<GravityExportData>> dataByMode,
-      File exportDir,
-      ContentResolver contentResolver
-  ) {
-
-    return exportGenericData(
-        dataByMode,
-        exportDir,
-        contentResolver,
-        Constants.GRAVITY_DATA_PREFIX,
-        (outputStream, data) -> {
-          outputStream.write(Constants.GRAVITY_COLUMN_HEADERS.getBytes());
-          for (GravityExportData item : data) {
-            String row = String.format(
-                Locale.getDefault(),
-                Constants.GRAVITY_EXPORT_PATTERN,
-                item.getId(),
-                item.getUserId(),
-                item.getUserName(),
-                item.getImageId(),
-                item.getImageName(),
-                item.getAttempt(),
-                item.getTimestamp(),
-                item.getX(),
-                item.getY(),
-                item.getZ(),
-                item.getDrawingMode()
-            );
-            outputStream.write(row.getBytes());
-          }
-        },
-        mode -> false
-    );
-  }
-
-  private boolean exportGyroscopeData(
-      Map<String, List<GyroscopeExportData>> dataByMode,
-      File exportDir,
-      ContentResolver contentResolver
-  ) {
-
-    return exportGenericData(
-        dataByMode,
-        exportDir,
-        contentResolver,
-        Constants.GYROSCOPE_DATA_PREFIX,
-        (outputStream, data) -> {
-          outputStream.write(Constants.GYROSCOPE_COLUMN_HEADERS.getBytes());
-          for (GyroscopeExportData item : data) {
-            String row = String.format(
-                Locale.getDefault(),
-                Constants.GYROSCOPE_EXPORT_PATTERN,
-                item.getId(),
-                item.getUserId(),
-                item.getUserName(),
-                item.getImageId(),
-                item.getImageName(),
-                item.getAttempt(),
-                item.getTimestamp(),
-                item.getX(),
-                item.getY(),
-                item.getZ(),
-                item.getDrawingMode()
-            );
-            outputStream.write(row.getBytes());
-          }
-        },
-        mode -> false
-    );
-  }
-
-  private boolean exportMagneticFieldData(
-      Map<String, List<MagneticFieldExportData>> dataByMode,
-      File exportDir,
-      ContentResolver contentResolver
-  ) {
-
-    return exportGenericData(
-        dataByMode,
-        exportDir,
-        contentResolver,
-        Constants.MAGNETIC_FIELD_DATA_PREFIX,
-        (outputStream, data) -> {
-          outputStream.write(Constants.MAGNETIC_FIELD_COLUMN_HEADERS.getBytes());
-          for (MagneticFieldExportData item : data) {
-            String row = String.format(
-                Locale.getDefault(),
-                Constants.MAGNETIC_FIELD_EXPORT_PATTERN,
-                item.getId(),
-                item.getUserId(),
-                item.getUserName(),
-                item.getImageId(),
-                item.getImageName(),
-                item.getAttempt(),
-                item.getTimestamp(),
-                item.getX(),
-                item.getY(),
-                item.getZ(),
-                item.getDrawingMode()
-            );
-            outputStream.write(row.getBytes());
-          }
-        },
-        mode -> false
-    );
-  }
-
-  private boolean exportMagneticFieldBaselineData(
-      Map<String, List<MagneticFieldBaselineExportData>> dataByMode,
-      File exportDir,
-      ContentResolver contentResolver
-  ) {
-
-    return exportGenericData(
-        dataByMode,
-        exportDir,
-        contentResolver,
-        Constants.MAGNETIC_FIELD_BASELINE_DATA_PREFIX,
-        (outputStream, data) -> {
-          outputStream.write(Constants.MAGNETIC_FIELD_BASELINE_COLUMN_HEADERS.getBytes());
-          for (MagneticFieldBaselineExportData item : data) {
-            String row = String.format(
-                Locale.getDefault(),
-                Constants.MAGNETIC_FIELD_BASELINE_EXPORT_PATTERN,
-                item.getId(),
-                item.getUserId(),
-                item.getUserName(),
-                item.getImageId(),
-                item.getImageName(),
-                item.getAttempt(),
-                item.getTimestamp(),
-                item.getAvgX(),
-                item.getAvgY(),
-                item.getAvgZ(),
-                item.getDurationMs(),
-                item.getSampleCount(),
-                item.getStdDevX(),
-                item.getStdDevY(),
-                item.getStdDevZ(),
-                item.getDrawingMode()
-            );
-            outputStream.write(row.getBytes());
-          }
-        },
-        mode -> false
-    );
-  }
-
-  private boolean exportAccelerometerData(
-      Map<String, List<AccelerometerExportData>> dataByMode,
-      File exportDir,
-      ContentResolver contentResolver
-  ) {
-
-    return exportGenericData(
-        dataByMode,
-        exportDir,
-        contentResolver,
-        Constants.ACCELEROMETER_DATA_PREFIX,
-        (outputStream, data) -> {
-          outputStream.write(Constants.ACCELEROMETER_COLUMN_HEADERS.getBytes());
-          for (AccelerometerExportData item : data) {
-            String row = String.format(
-                Locale.getDefault(),
-                Constants.ACCELEROMETER_EXPORT_PATTERN,
-                item.getId(),
-                item.getUserId(),
-                item.getUserName(),
-                item.getImageId(),
-                item.getImageName(),
-                item.getAttempt(),
-                item.getTimestamp(),
-                item.getX(),
-                item.getY(),
-                item.getZ(),
-                item.getDrawingMode()
-            );
-            outputStream.write(row.getBytes());
-          }
-        },
-        mode -> false
-    );
-  }
-
-  private <T> boolean exportGenericData(
-      Map<String, List<T>> dataByMode,
-      File exportDir,
-      ContentResolver contentResolver,
-      String dataPrefix,
-      DataWriter<T> writer,
-      Predicate<String> shouldSetFileUri
-  ) {
-
-    boolean allExported = true;
+  private boolean exportAllDataTypesNewStructure(ExportDataBundle dataBundle, File exportDir) {
+    ContentResolver contentResolver = requireActivity().getContentResolver();
     String timestamp = new SimpleDateFormat(
         Constants.EXPORT_DATE_FORMAT,
                                             Locale.getDefault()
     ).format(new Date());
 
-    for (Map.Entry<String, List<T>> entry : dataByMode.entrySet()) {
-      String mode = entry.getKey();
-      List<T> modeData = entry.getValue();
+    // Create user directory with timestamp
+    String userDirName = userListPreference.getEntry() + "_" + timestamp;
+    File userDir = new File(exportDir, userDirName);
+    if (!userDir.exists() && !userDir.mkdirs()) {
+      showExportMessage("Failed to create user directory");
+      return false;
+    }
 
-      if (modeData.isEmpty()) {
-        continue;
-      }
+    boolean allExported = true;
 
-      String fileName = userListPreference.getEntry()
-                        + dataPrefix
-                        + MODE_PREFIX
-                        + mode
-                        + "_"
-                        + timestamp
-                        + ".csv";
-      File file = new File(exportDir, fileName);
-      Uri exportFileUri = Uri.fromFile(file);
+    // Export data for each mode
+    allExported &= exportDataByModeAndImage(
+        dataBundle.drawingDataByMode,
+        userDir,
+        contentResolver,
+        Constants.DRAWING_DATA_PREFIX
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.gravityDataByMode,
+        userDir,
+        contentResolver,
+        Constants.GRAVITY_DATA_PREFIX,
+        this::writeGravityDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.gyroscopeDataByMode,
+        userDir,
+        contentResolver,
+        Constants.GYROSCOPE_DATA_PREFIX,
+        this::writeGyroscopeDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.magneticFieldDataByMode,
+        userDir,
+        contentResolver,
+        Constants.MAGNETIC_FIELD_DATA_PREFIX,
+        this::writeMagneticFieldDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.magneticFieldBaselineDataByMode,
+        userDir,
+        contentResolver,
+        Constants.MAGNETIC_FIELD_BASELINE_DATA_PREFIX,
+        this::writeMagneticFieldBaselineDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.accelerometerDataByMode,
+        userDir,
+        contentResolver,
+        Constants.ACCELEROMETER_DATA_PREFIX,
+        this::writeAccelerometerDataToStream
+    );
 
-      try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
-        if (outputStream != null) {
-          writer.writeData(outputStream, modeData);
+    return allExported;
+  }
 
-          if (shouldSetFileUri.test(mode)) {
-            fileUri = exportFileUri;
-          }
+  private boolean exportDataByModeAndImage(
+      Map<String, List<DrawingExportData>> dataByMode,
+      File userDir,
+      ContentResolver contentResolver,
+      String dataPrefix
+  ) {
+    boolean allExported = true;
+
+    for (Map.Entry<String, List<DrawingExportData>> modeEntry : dataByMode.entrySet()) {
+      String mode = modeEntry.getKey();
+      List<DrawingExportData> modeData = modeEntry.getValue();
+
+      if (!shouldSkipModeData(modeData)) {
+        File modeDir = createModeDirectory(userDir, mode);
+        if (modeDir != null) {
+          boolean modeExported = exportDataForMode(
+              modeData,
+              modeDir,
+              contentResolver,
+              dataPrefix,
+              mode
+          );
+          allExported &= modeExported;
+        } else {
+          allExported = false;
         }
-      } catch (IOException e) {
-        allExported = false;
-        showExportMessage("Failed to export " + dataPrefix + " data for mode: " + mode);
       }
     }
 
     return allExported;
   }
 
-  private String createDeleteUserDataMessage() {
-    return String.format(
-        "Are you sure you want to delete drawing data for "
-        + "user: %s?%n%nThis will remove all "
-        + "drawing history but keep the user profile.",
-        userListPreference.getEntry()
-    );
+  private boolean shouldSkipModeData(List<DrawingExportData> modeData) {
+    return modeData.isEmpty();
+  }
+
+  private File createModeDirectory(File userDir, String mode) {
+    File modeDir = new File(userDir, mode);
+    if (!modeDir.exists() && !modeDir.mkdirs()) {
+      showExportMessage("Failed to create mode directory: " + mode);
+      return null;
+    }
+    return modeDir;
+  }
+
+  private boolean exportDataForMode(
+      List<DrawingExportData> modeData,
+      File modeDir,
+      ContentResolver contentResolver,
+      String dataPrefix,
+      String mode
+  ) {
+    boolean allExported = true;
+    Map<String, List<DrawingExportData>> dataByImage = groupDrawingDataByImage(modeData);
+
+    for (Map.Entry<String, List<DrawingExportData>> imageEntry : dataByImage.entrySet()) {
+      String imageName = imageEntry.getKey();
+      List<DrawingExportData> imageData = imageEntry.getValue();
+
+      boolean imageExported = exportDataForImage(
+          imageName,
+          imageData,
+          modeDir,
+          contentResolver,
+          dataPrefix,
+          mode
+      );
+      allExported &= imageExported;
+    }
+
+    return allExported;
+  }
+
+  private boolean exportDataForImage(
+      String imageName,
+      List<DrawingExportData> imageData,
+      File modeDir,
+      ContentResolver contentResolver,
+      String dataPrefix,
+      String mode
+  ) {
+    // Convert to lowercase and add underscores
+    String formattedImageName = imageName.toLowerCase();
+    String formattedDataType = formatDataTypeForFilename(dataPrefix);
+    String fileName = formattedImageName + "_" + formattedDataType + ".csv";
+
+    File file = new File(modeDir, fileName);
+    Uri exportFileUri = Uri.fromFile(file);
+
+    try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
+      if (outputStream != null) {
+        writeDrawingDataToStream(outputStream, imageData);
+
+        if (mode.equals(Constants.DRAWING_MODE_NORMAL)) {
+          fileUri = exportFileUri;
+        }
+      }
+      return true;
+    } catch (IOException e) {
+      showExportMessage("Failed to export " + dataPrefix + " data for image: " + imageName);
+      return false;
+    }
+  }
+
+  private Map<String, List<DrawingExportData>> groupDrawingDataByImage(List<DrawingExportData> data) {
+    Map<String, List<DrawingExportData>> dataByImage = new HashMap<>();
+
+    for (DrawingExportData item : data) {
+      String imageName = item.getImageName();
+      if (imageName == null || imageName.isEmpty()) {
+        imageName = UNKNOWN_IMAGE;
+      }
+
+      dataByImage.computeIfAbsent(imageName, k -> new ArrayList<>()).add(item);
+    }
+
+    return dataByImage;
+  }
+
+  private String formatDataTypeForFilename(String dataPrefix) {
+    // Remove leading and trailing underscores and convert to lowercase
+    String cleanPrefix = dataPrefix.replace("_", "").toLowerCase();
+
+    // Add underscores between words for better readability
+    switch (cleanPrefix) {
+      case "drawingdata":
+        return "drawing_data";
+      case "gravitydata":
+        return "gravity_data";
+      case "gyroscopedata":
+        return "gyroscope_data";
+      case "magneticfielddata":
+        return "magnetic_field_data";
+      case "magneticfieldbaselinedata":
+        return "magnetic_field_baseline_data";
+      case "accelerometerdata":
+        return "accelerometer_data";
+      default:
+        return cleanPrefix;
+    }
+  }
+
+  private void writeDrawingDataToStream(OutputStream outputStream, List<DrawingExportData> modeData)
+  throws IOException {
+    outputStream.write(Constants.COLUMN_HEADERS.getBytes());
+
+    for (DrawingExportData data : modeData) {
+      String row = String.format(
+          Locale.getDefault(),
+          Constants.FILE_EXPORT_PATTERN,
+          data.getId(),
+          data.getUserID(),
+          data.getUserName(),
+          data.getAttempt(),
+          data.getTime(),
+          data.getX(),
+          data.getY(),
+          data.getAction(),
+          data.getItemType(),
+          data.getImageID(),
+          data.getImageName(),
+          data.getDrawingMode(),
+          data.getSize(),
+          data.getPressure(),
+          data.getOrientation()
+      );
+      outputStream.write(row.getBytes());
+    }
+  }
+
+  private <T> boolean exportSensorDataByModeAndImage(
+      Map<String, List<T>> dataByMode,
+      File userDir,
+      ContentResolver contentResolver,
+      String dataPrefix,
+      SensorDataWriter<T> writer
+  ) {
+    boolean allExported = true;
+
+    for (Map.Entry<String, List<T>> modeEntry : dataByMode.entrySet()) {
+      String mode = modeEntry.getKey();
+      List<T> modeData = modeEntry.getValue();
+
+      if (!shouldSkipSensorModeData(modeData)) {
+        File modeDir = createModeDirectory(userDir, mode);
+        if (modeDir != null) {
+          boolean modeExported = exportSensorDataForMode(
+              modeData,
+              modeDir,
+              contentResolver,
+              dataPrefix,
+              writer
+          );
+          allExported &= modeExported;
+        } else {
+          allExported = false;
+        }
+      }
+    }
+
+    return allExported;
+  }
+
+  private <T> boolean shouldSkipSensorModeData(List<T> modeData) {
+    return modeData.isEmpty();
+  }
+
+  private <T> boolean exportSensorDataForMode(
+      List<T> modeData,
+      File modeDir,
+      ContentResolver contentResolver,
+      String dataPrefix,
+      SensorDataWriter<T> writer
+  ) {
+    boolean allExported = true;
+    Map<String, List<T>> dataByImage = groupSensorDataByImage(modeData);
+
+    for (Map.Entry<String, List<T>> imageEntry : dataByImage.entrySet()) {
+      String imageName = imageEntry.getKey();
+      List<T> imageData = imageEntry.getValue();
+
+      boolean imageExported = exportSensorDataForImage(
+          imageName,
+          imageData,
+          modeDir,
+          contentResolver,
+          dataPrefix,
+          writer
+      );
+      allExported &= imageExported;
+    }
+
+    return allExported;
+  }
+
+  private <T> boolean exportSensorDataForImage(
+      String imageName,
+      List<T> imageData,
+      File modeDir,
+      ContentResolver contentResolver,
+      String dataPrefix,
+      SensorDataWriter<T> writer
+  ) {
+    // Convert to lowercase and add underscores
+    String formattedImageName = imageName.toLowerCase();
+    String formattedDataType = formatDataTypeForFilename(dataPrefix);
+    String fileName = formattedImageName + "_" + formattedDataType + ".csv";
+
+    File file = new File(modeDir, fileName);
+    Uri exportFileUri = Uri.fromFile(file);
+
+    try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
+      if (outputStream != null) {
+        writer.writeData(outputStream, imageData);
+      }
+      return true;
+    } catch (IOException e) {
+      showExportMessage("Failed to export " + dataPrefix + " data for image: " + imageName);
+      return false;
+    }
+  }
+
+  private <T> Map<String, List<T>> groupSensorDataByImage(List<T> data) {
+    Map<String, List<T>> dataByImage = new HashMap<>();
+
+    for (T item : data) {
+      String imageName = getSensorDataImageName(item);
+      if (imageName == null || imageName.isEmpty()) {
+        imageName = UNKNOWN_IMAGE;
+      }
+
+      dataByImage.computeIfAbsent(imageName, k -> new ArrayList<>()).add(item);
+    }
+
+    return dataByImage;
+  }
+
+  private String getSensorDataImageName(Object sensorData) {
+    if (sensorData instanceof GravityExportData) {
+      return ((GravityExportData) sensorData).getImageName();
+    } else if (sensorData instanceof GyroscopeExportData) {
+      return ((GyroscopeExportData) sensorData).getImageName();
+    } else if (sensorData instanceof MagneticFieldExportData) {
+      return ((MagneticFieldExportData) sensorData).getImageName();
+    } else if (sensorData instanceof MagneticFieldBaselineExportData) {
+      return ((MagneticFieldBaselineExportData) sensorData).getImageName();
+    } else if (sensorData instanceof AccelerometerExportData) {
+      return ((AccelerometerExportData) sensorData).getImageName();
+    }
+    return UNKNOWN_IMAGE;
+  }
+
+  private void writeGravityDataToStream(OutputStream outputStream, List<GravityExportData> data)
+  throws IOException {
+    outputStream.write(Constants.GRAVITY_COLUMN_HEADERS.getBytes());
+    for (GravityExportData item : data) {
+      String row = String.format(
+          Locale.getDefault(),
+          Constants.GRAVITY_EXPORT_PATTERN,
+          item.getId(),
+          item.getUserId(),
+          item.getUserName(),
+          item.getImageId(),
+          item.getImageName(),
+          item.getAttempt(),
+          item.getTimestamp(),
+          item.getX(),
+          item.getY(),
+          item.getZ(),
+          item.getDrawingMode()
+      );
+      outputStream.write(row.getBytes());
+    }
+  }
+
+  private void writeGyroscopeDataToStream(OutputStream outputStream, List<GyroscopeExportData> data)
+  throws IOException {
+    outputStream.write(Constants.GYROSCOPE_COLUMN_HEADERS.getBytes());
+    for (GyroscopeExportData item : data) {
+      String row = String.format(
+          Locale.getDefault(),
+          Constants.GYROSCOPE_EXPORT_PATTERN,
+          item.getId(),
+          item.getUserId(),
+          item.getUserName(),
+          item.getImageId(),
+          item.getImageName(),
+          item.getAttempt(),
+          item.getTimestamp(),
+          item.getX(),
+          item.getY(),
+          item.getZ(),
+          item.getDrawingMode()
+      );
+      outputStream.write(row.getBytes());
+    }
+  }
+
+  private void writeMagneticFieldDataToStream(
+      OutputStream outputStream,
+      List<MagneticFieldExportData> data
+  )
+  throws IOException {
+    outputStream.write(Constants.MAGNETIC_FIELD_COLUMN_HEADERS.getBytes());
+    for (MagneticFieldExportData item : data) {
+      String row = String.format(
+          Locale.getDefault(),
+          Constants.MAGNETIC_FIELD_EXPORT_PATTERN,
+          item.getId(),
+          item.getUserId(),
+          item.getUserName(),
+          item.getImageId(),
+          item.getImageName(),
+          item.getAttempt(),
+          item.getTimestamp(),
+          item.getX(),
+          item.getY(),
+          item.getZ(),
+          item.getDrawingMode()
+      );
+      outputStream.write(row.getBytes());
+    }
+  }
+
+  private void writeMagneticFieldBaselineDataToStream(
+      OutputStream outputStream,
+      List<MagneticFieldBaselineExportData> data
+  )
+  throws IOException {
+    outputStream.write(Constants.MAGNETIC_FIELD_BASELINE_COLUMN_HEADERS.getBytes());
+    for (MagneticFieldBaselineExportData item : data) {
+      String row = String.format(
+          Locale.getDefault(),
+          Constants.MAGNETIC_FIELD_BASELINE_EXPORT_PATTERN,
+          item.getId(),
+          item.getUserId(),
+          item.getUserName(),
+          item.getImageId(),
+          item.getImageName(),
+          item.getAttempt(),
+          item.getTimestamp(),
+          item.getAvgX(),
+          item.getAvgY(),
+          item.getAvgZ(),
+          item.getDurationMs(),
+          item.getSampleCount(),
+          item.getStdDevX(),
+          item.getStdDevY(),
+          item.getStdDevZ(),
+          item.getDrawingMode()
+      );
+      outputStream.write(row.getBytes());
+    }
+  }
+
+  private void writeAccelerometerDataToStream(
+      OutputStream outputStream,
+      List<AccelerometerExportData> data
+  )
+  throws IOException {
+    outputStream.write(Constants.ACCELEROMETER_COLUMN_HEADERS.getBytes());
+    for (AccelerometerExportData item : data) {
+      String row = String.format(
+          Locale.getDefault(),
+          Constants.ACCELEROMETER_EXPORT_PATTERN,
+          item.getId(),
+          item.getUserId(),
+          item.getUserName(),
+          item.getImageId(),
+          item.getImageName(),
+          item.getAttempt(),
+          item.getTimestamp(),
+          item.getX(),
+          item.getY(),
+          item.getZ(),
+          item.getDrawingMode()
+      );
+      outputStream.write(row.getBytes());
+    }
   }
 
   private void setupDeleteUserDataPreference() {
@@ -962,43 +1199,6 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     }
   }
 
-  private void uploadDataToFirebase(SettingsActivity activity) {
-    boolean success = exportDataToCSV(true);
-    if (!success) {
-      requireActivity().runOnUiThread(() -> {
-        if (activity != null) {
-          activity.hideUploadOverlay();
-        }
-        showExportMessage(getString(R.string.upload_failed));
-      });
-      return;
-    }
-
-    FirebaseStorage storage = FirebaseStorage.getInstance();
-    StorageReference storageRef = storage.getReference();
-    String timestamp = new SimpleDateFormat(
-        Constants.EXPORT_DATE_FORMAT,
-                                            Locale.getDefault()
-    ).format(new Date());
-    String fileName = userListPreference.getEntry() + "_drawing_data_" + timestamp + ".csv";
-    StorageReference fileRef = storageRef.child("SketchIDData/" + fileName);
-
-    UploadTask uploadTask = fileRef.putFile(fileUri);
-    uploadTask.addOnSuccessListener(taskSnapshot -> requireActivity().runOnUiThread(() -> {
-      if (activity != null) {
-        activity.hideUploadOverlay();
-      }
-      showExportMessage(getString(R.string.upload_complete));
-    })).addOnFailureListener(e -> requireActivity().runOnUiThread(() -> {
-      if (activity != null) {
-        activity.hideUploadOverlay();
-      }
-      showExportMessage(getString(R.string.upload_failed));
-    }));
-
-    fileUri = null;
-  }
-
   private void setupExportAllDataPreference() {
     if (exportAllDataPreference != null) {
       exportAllDataPreference.setOnPreferenceClickListener(preference -> {
@@ -1083,7 +1283,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     String timestamp = createTimestamp();
 
     for (User user : users) {
-      boolean userDataExported = exportDataForSingleUser(
+      boolean userDataExported = exportDataForSingleUserNewStructure(
           user,
           exportDir,
           contentResolver,
@@ -1099,164 +1299,109 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     return allExported;
   }
 
-  private boolean exportDataForSingleUser(
+  private boolean exportDataForSingleUserNewStructure(
       User user,
       File exportDir,
       ContentResolver contentResolver,
       String timestamp
   ) {
-    List<DrawingExportData> drawingDataList = db
-        .drawingDataDao()
-        .getAllDrawingDataWithUsersAndImagesByUserID(user.id);
-
-    if (drawingDataList.isEmpty()) {
-      return true;
+    // Create user directory with timestamp
+    String userDirName = user.name + "_" + timestamp;
+    File userDir = new File(exportDir, userDirName);
+    if (!userDir.exists() && !userDir.mkdirs()) {
+      showExportMessage("Failed to create user directory for: " + user.name);
+      return false;
     }
 
-    processDrawingModes(drawingDataList);
-    Map<String, List<DrawingExportData>> dataByMode = groupDataByDrawingMode(drawingDataList);
-
-    return exportUserDataByModes(user, dataByMode, exportDir, contentResolver, timestamp);
-  }
-
-  private boolean exportUserDataByModes(
-      User user,
-      Map<String, List<DrawingExportData>> dataByMode,
-      File exportDir,
-      ContentResolver contentResolver,
-      String timestamp
-  ) {
+    // Get all data for this user
+    ExportDataBundle dataBundle = retrieveAndProcessUserData(user.id);
+    if (dataBundle.isEmpty()) {
+      return true; // No data to export, but not an error
+    }
 
     boolean allExported = true;
 
-    for (Map.Entry<String, List<DrawingExportData>> entry : dataByMode.entrySet()) {
-      String mode = entry.getKey();
-      List<DrawingExportData> modeData = entry.getValue();
-
-      if (modeData.isEmpty()) {
-        continue;
-      }
-
-      boolean modeExported = exportUserModeData(
-          user,
-          mode,
-          modeData,
-          exportDir,
-          contentResolver,
-          timestamp
-      );
-      allExported &= modeExported;
-    }
+    // Export data for each mode using new structure
+    allExported &= exportDataByModeAndImage(
+        dataBundle.drawingDataByMode,
+        userDir,
+        contentResolver,
+        Constants.DRAWING_DATA_PREFIX
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.gravityDataByMode,
+        userDir,
+        contentResolver,
+        Constants.GRAVITY_DATA_PREFIX,
+        this::writeGravityDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.gyroscopeDataByMode,
+        userDir,
+        contentResolver,
+        Constants.GYROSCOPE_DATA_PREFIX,
+        this::writeGyroscopeDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.magneticFieldDataByMode,
+        userDir,
+        contentResolver,
+        Constants.MAGNETIC_FIELD_DATA_PREFIX,
+        this::writeMagneticFieldDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.magneticFieldBaselineDataByMode,
+        userDir,
+        contentResolver,
+        Constants.MAGNETIC_FIELD_BASELINE_DATA_PREFIX,
+        this::writeMagneticFieldBaselineDataToStream
+    );
+    allExported &= exportSensorDataByModeAndImage(
+        dataBundle.accelerometerDataByMode,
+        userDir,
+        contentResolver,
+        Constants.ACCELEROMETER_DATA_PREFIX,
+        this::writeAccelerometerDataToStream
+    );
 
     return allExported;
   }
 
-  private boolean exportUserModeData(
-      User user,
-      String mode,
-      List<DrawingExportData> modeData,
-      File exportDir,
-      ContentResolver contentResolver,
-      String timestamp
-  ) {
+  private ExportDataBundle retrieveAndProcessUserData(long userId) {
+    List<DrawingExportData> drawingData = db
+        .drawingDataDao()
+        .getAllDrawingDataWithUsersAndImagesByUserID(userId);
+    List<GravityExportData> gravityData = db
+        .gravityDataDao()
+        .getGravityDataWithUsersAndImagesByUserId(userId);
+    List<GyroscopeExportData> gyroscopeData = db
+        .gyroscopeDataDao()
+        .getGyroscopeDataWithUsersAndImagesByUserId(userId);
+    List<MagneticFieldExportData> magneticFieldData = db
+        .magneticFieldDataDao()
+        .getMagneticFieldDataWithUsersAndImagesByUserId(userId);
+    List<MagneticFieldBaselineExportData> magneticFieldBaselineData = db
+        .magneticFieldBaselineDataDao()
+        .getBaselineDataWithUsersAndImagesByUserId(userId);
+    List<AccelerometerExportData> accelerometerData = db
+        .accelerometerDataDao()
+        .getAccelerometerDataWithUsersAndImagesByUserId(userId);
 
-    String fileName = user.name
-                      + Constants.DRAWING_DATA_PREFIX
-                      + MODE_PREFIX
-                      + mode
-                      + "_"
-                      + timestamp
-                      + ".csv";
-    File file = new File(exportDir, fileName);
-    Uri exportFileUri = Uri.fromFile(file);
+    processDrawingModes(drawingData);
+    processGravityDrawingModes(gravityData);
+    processGyroscopeDrawingModes(gyroscopeData);
+    processMagneticFieldDrawingModes(magneticFieldData);
+    processMagneticFieldBaselineDrawingModes(magneticFieldBaselineData);
+    processAccelerometerDrawingModes(accelerometerData);
 
-    try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
-      if (outputStream != null) {
-        writeDrawingDataToStream(outputStream, modeData);
-        return true;
-      }
-    } catch (IOException e) {
-      showExportMessage("Failed to export data for user: " + user.name + ", mode: " + mode);
-    }
-
-    return false;
-  }
-
-  private void writeDrawingDataToStream(OutputStream outputStream, List<DrawingExportData> modeData)
-  throws IOException {
-    outputStream.write(Constants.COLUMN_HEADERS.getBytes());
-
-    for (DrawingExportData data : modeData) {
-      String row = String.format(
-          Locale.getDefault(),
-          Constants.FILE_EXPORT_PATTERN,
-          data.getId(),
-          data.getUserID(),
-          data.getUserName(),
-          data.getAttempt(),
-          data.getTime(),
-          data.getX(),
-          data.getY(),
-          data.getAction(),
-          data.getItemType(),
-          data.getImageID(),
-          data.getImageName(),
-          data.getDrawingMode(),
-          data.getSize(),
-          data.getPressure(),
-          data.getOrientation()
-      );
-      outputStream.write(row.getBytes());
-    }
-  }
-
-  /**
-   * Process drawing data to add drawing mode information from session settings
-   */
-  private void processDrawingModes(List<DrawingExportData> drawingDataList) {
-    processDataModes(
-        drawingDataList,
-        DrawingExportData::getSessionID,
-        DrawingExportData::getUserID,
-        DrawingExportData::setDrawingMode
+    return new ExportDataBundle(
+        groupDataByDrawingMode(drawingData),
+        groupGravityDataByDrawingMode(gravityData),
+        groupGyroscopeDataByDrawingMode(gyroscopeData),
+        groupMagneticFieldDataByDrawingMode(magneticFieldData),
+        groupMagneticFieldBaselineDataByDrawingMode(magneticFieldBaselineData),
+        groupAccelerometerDataByDrawingMode(accelerometerData)
     );
-  }
-
-  /**
-   * Generic method to process any data type for drawing modes
-   */
-  private <T> void processDataModes(
-      List<T> dataList,
-      Function<T, String> sessionIdGetter,
-      ToLongFunction<T> userIdGetter,
-      BiConsumer<T, String> drawingModeSetter
-  ) {
-
-    for (T data : dataList) {
-      String sessionId = sessionIdGetter.apply(data);
-
-      if (sessionId != null) {
-        long userId = userIdGetter.applyAsLong(data);
-        UserProgressManager.Session session = UserProgressManager.getSession(
-            requireContext(),
-            userId,
-            sessionId
-        );
-
-        String drawingMode = extractDrawingModeFromSession(session);
-        drawingModeSetter.accept(data, drawingMode);
-      } else {
-        drawingModeSetter.accept(data, Constants.DRAWING_MODE_NORMAL);
-      }
-    }
-  }
-
-  private String extractDrawingModeFromSession(UserProgressManager.Session session) {
-    if (session != null && session.getSettings() != null) {
-      Object modeObj = session.getSettings().get(Constants.DRAWING_KEY_MODE);
-      return modeObj != null ? modeObj.toString() : Constants.DRAWING_MODE_NORMAL;
-    }
-    return Constants.DRAWING_MODE_NORMAL;
   }
 
   /**
@@ -1513,38 +1658,53 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     UserProgressManager.clearUserProgress(requireContext(), userId);
   }
 
-  private void writeUserDataToFile(
-      OutputStream outputStream,
-      List<DrawingExportData> drawingDataList
-  )
-  throws IOException {
+  /**
+   * Process drawing data to add drawing mode information from session settings
+   */
+  private void processDrawingModes(List<DrawingExportData> drawingDataList) {
+    processDataModes(
+        drawingDataList,
+        DrawingExportData::getSessionID,
+        DrawingExportData::getUserID,
+        DrawingExportData::setDrawingMode
+    );
+  }
 
-    processDrawingModes(drawingDataList);
+  /**
+   * Generic method to process any data type for drawing modes
+   */
+  private <T> void processDataModes(
+      List<T> dataList,
+      Function<T, String> sessionIdGetter,
+      ToLongFunction<T> userIdGetter,
+      BiConsumer<T, String> drawingModeSetter
+  ) {
 
-    outputStream.write(Constants.COLUMN_HEADERS.getBytes());
+    for (T data : dataList) {
+      String sessionId = sessionIdGetter.apply(data);
 
-    for (DrawingExportData data : drawingDataList) {
-      String row = String.format(
-          Locale.getDefault(),
-          Constants.FILE_EXPORT_PATTERN,
-          data.getId(),
-          data.getUserID(),
-          data.getUserName(),
-          data.getAttempt(),
-          data.getTime(),
-          data.getX(),
-          data.getY(),
-          data.getAction(),
-          data.getItemType(),
-          data.getImageID(),
-          data.getImageName(),
-          data.getDrawingMode(),
-          data.getSize(),
-          data.getPressure(),
-          data.getOrientation()
-      );
-      outputStream.write(row.getBytes());
+      if (sessionId != null) {
+        long userId = userIdGetter.applyAsLong(data);
+        UserProgressManager.Session session = UserProgressManager.getSession(
+            requireContext(),
+            userId,
+            sessionId
+        );
+
+        String drawingMode = extractDrawingModeFromSession(session);
+        drawingModeSetter.accept(data, drawingMode);
+      } else {
+        drawingModeSetter.accept(data, Constants.DRAWING_MODE_NORMAL);
+      }
     }
+  }
+
+  private String extractDrawingModeFromSession(UserProgressManager.Session session) {
+    if (session != null && session.getSettings() != null) {
+      Object modeObj = session.getSettings().get(Constants.DRAWING_KEY_MODE);
+      return modeObj != null ? modeObj.toString() : Constants.DRAWING_MODE_NORMAL;
+    }
+    return Constants.DRAWING_MODE_NORMAL;
   }
 
   /**
@@ -1734,58 +1894,104 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
     Map<String, List<DrawingExportData>> dataByMode = groupDataByDrawingMode(drawingDataList);
 
+    // Create user directory with timestamp
+    String userDirName = user.name + "_" + context.timestamp;
+    File userDir = new File(context.exportDir, userDirName);
+    if (!userDir.exists() && !userDir.mkdirs()) {
+      showToast("Failed to create user directory for upload: " + user.name);
+      return;
+    }
+
     for (Map.Entry<String, List<DrawingExportData>> entry : dataByMode.entrySet()) {
       String mode = entry.getKey();
       List<DrawingExportData> modeData = entry.getValue();
 
-      if (modeData.isEmpty()) {
-        continue;
-      }
-
-      String fileName = user.name
-                        + Constants.DRAWING_DATA_PREFIX
-                        + MODE_PREFIX
-                        + mode
-                        + "_"
-                        + context.timestamp
-                        + ".csv";
-
-      File file = new File(context.exportDir, fileName);
-      Uri uploadFileUri = Uri.fromFile(file);
-
-      try (OutputStream outputStream = context.contentResolver.openOutputStream(uploadFileUri)) {
-        if (outputStream != null) {
-
-          writeUserDataToFile(outputStream, modeData);
-
-          if (mode.equals(Constants.DRAWING_MODE_NORMAL)) {
-            uploadFileToFirebase(
-                user,
-                fileName,
-                uploadFileUri,
-                context.storageRef,
-                context.uploadedCount,
-                context.totalUsers,
-                activity
-            );
-          }
+      if (!shouldSkipModeData(modeData)) {
+        File modeDir = createModeDirectory(userDir, mode);
+        if (modeDir != null) {
+          processUploadDataForMode(user, modeData, modeDir, mode, userDirName, context, activity);
+        } else {
+          showToast("Failed to create mode directory for upload: " + mode);
         }
-      } catch (IOException e) {
-        showToast("Failed to export data for user: " + user.name + ", mode: " + mode);
       }
+    }
+  }
+
+  private void processUploadDataForMode(
+      User user,
+      List<DrawingExportData> modeData,
+      File modeDir,
+      String mode,
+      String userDirName,
+      UploadContext context,
+      SettingsActivity activity
+  ) {
+    // Group data by image
+    Map<String, List<DrawingExportData>> dataByImage = groupDrawingDataByImage(modeData);
+
+    UploadImageParams params = new UploadImageParams(modeDir, mode, userDirName, context, activity);
+
+    for (Map.Entry<String, List<DrawingExportData>> imageEntry : dataByImage.entrySet()) {
+      String imageName = imageEntry.getKey();
+      List<DrawingExportData> imageData = imageEntry.getValue();
+
+      processUploadDataForImage(user, imageName, imageData, params);
+    }
+  }
+
+  private void processUploadDataForImage(
+      User user,
+      String imageName,
+      List<DrawingExportData> imageData,
+      UploadImageParams params
+  ) {
+    // Convert to lowercase and add underscores
+    String formattedImageName = imageName.toLowerCase();
+    String fileName = formattedImageName + "_drawing_data.csv";
+
+    File file = new File(params.modeDir, fileName);
+    Uri uploadFileUri = Uri.fromFile(file);
+
+    try (
+        OutputStream outputStream = params.context.contentResolver.openOutputStream(uploadFileUri)
+    ) {
+      if (outputStream != null) {
+        writeDrawingDataToStream(outputStream, imageData);
+
+        if (params.mode.equals(Constants.DRAWING_MODE_NORMAL)) {
+          // Upload with new path structure: SketchIDData/username_timestamp/mode/filename
+          String firebasePath = SKETCHID_DATA_PATH
+                                + params.userDirName
+                                + FIREBASE_PATH_SEPARATOR
+                                + params.mode
+                                + FIREBASE_PATH_SEPARATOR
+                                + fileName;
+          uploadFileToFirebase(
+              user,
+              firebasePath,
+              uploadFileUri,
+              params.context.storageRef,
+              params.context.uploadedCount,
+              params.context.totalUsers,
+              params.activity
+          );
+        }
+      }
+    } catch (IOException e) {
+      showToast("Failed to export data for user: " + user.name + ", image: " + imageName);
     }
   }
 
   private void uploadFileToFirebase(
       User user,
-      String fileName,
+      String firebasePath,
       Uri uploadFileUri,
       StorageReference storageRef,
       AtomicInteger uploadedCount,
       int totalUsers,
       SettingsActivity activity
   ) {
-    StorageReference fileRef = storageRef.child("SketchIDData/" + fileName);
+    StorageReference fileRef = storageRef.child(firebasePath);
     UploadTask uploadTask = fileRef.putFile(uploadFileUri);
 
     uploadTask.addOnSuccessListener(taskSnapshot -> {
@@ -1914,7 +2120,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   }
 
   @FunctionalInterface
-  private interface DataWriter<T> {
+  private interface SensorDataWriter<T> {
     void writeData(OutputStream outputStream, List<T> data)
     throws IOException;
   }
@@ -2005,6 +2211,31 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       this.totalUsers = totalUsers;
       this.timestamp = timestamp;
       this.exportDir = exportDir;
+    }
+  }
+
+  /**
+   * Parameter object for upload image processing
+   */
+  private static class UploadImageParams {
+    final File modeDir;
+    final String mode;
+    final String userDirName;
+    final UploadContext context;
+    final SettingsActivity activity;
+
+    UploadImageParams(
+        File modeDir,
+        String mode,
+        String userDirName,
+        UploadContext context,
+        SettingsActivity activity
+    ) {
+      this.modeDir = modeDir;
+      this.mode = mode;
+      this.userDirName = userDirName;
+      this.context = context;
+      this.activity = activity;
     }
   }
 }
