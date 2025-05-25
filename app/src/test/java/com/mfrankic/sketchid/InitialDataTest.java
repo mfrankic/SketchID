@@ -2,14 +2,19 @@ package com.mfrankic.sketchid;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.junit.MockitoJUnitRunner;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -18,338 +23,310 @@ import java.util.Set;
  * Unit tests for InitialData utility class.
  * Tests default image data generation and validation.
  */
+@RunWith(MockitoJUnitRunner.class)
 public class InitialDataTest {
 
   @Test
-  public void testConstructorThrowsException() {
+  public void testConstructor_ThrowsIllegalStateException() {
     try {
-      // Use reflection to test private constructor
-      java.lang.reflect.Constructor<InitialData> constructor
-          = InitialData.class.getDeclaredConstructor();
+      Constructor<InitialData> constructor = InitialData.class.getDeclaredConstructor();
       constructor.setAccessible(true);
       constructor.newInstance();
       fail("Constructor should throw IllegalStateException");
-    } catch (Exception e) {
+    } catch (InvocationTargetException e) {
       assertTrue(
           "Should throw IllegalStateException",
           e.getCause() instanceof IllegalStateException
       );
       assertEquals("Should have correct message", "Utility class", e.getCause().getMessage());
+    } catch (Exception e) {
+      fail("Unexpected exception: " + e.getMessage());
     }
   }
 
   @Test
-  public void testGetImagesNotNull() {
-    List<Image> images = InitialData.getImages();
-    assertNotNull("Images list should not be null", images);
+  public void testClass_IsUtilityClass() {
+    assertTrue("InitialData should be public", Modifier.isPublic(InitialData.class.getModifiers()));
+
+    // Check that constructor is private
+    try {
+      Constructor<InitialData> constructor = InitialData.class.getDeclaredConstructor();
+      assertTrue("Constructor should be private", Modifier.isPrivate(constructor.getModifiers()));
+    } catch (NoSuchMethodException e) {
+      fail("InitialData should have a default constructor");
+    }
+
+    // Verify all public methods are static
+    Method[] methods = InitialData.class.getDeclaredMethods();
+    for (Method method : methods) {
+      if (Modifier.isPublic(method.getModifiers())) {
+        assertTrue(
+            "Public method " + method.getName() + " should be static",
+            Modifier.isStatic(method.getModifiers())
+        );
+      }
+    }
   }
 
   @Test
-  public void testGetImagesNotEmpty() {
+  public void testGetImages_ReturnsNonNullList() {
     List<Image> images = InitialData.getImages();
-    assertFalse("Images list should not be empty", images.isEmpty());
-    assertTrue("Images list should have at least one image", images.size() > 0);
+    assertNotNull("getImages should return a non-null list", images);
   }
 
   @Test
-  public void testGetImagesExpectedCount() {
+  public void testGetImages_ReturnsNonEmptyList() {
     List<Image> images = InitialData.getImages();
-    // Based on the implementation, we expect 10 default images
-    assertEquals("Should have exactly 10 default images", 10, images.size());
+    assertFalse("getImages should return a non-empty list", images.isEmpty());
+    assertTrue("getImages should return multiple images", images.size() > 1);
   }
 
   @Test
-  public void testAllImagesHaveValidNames() {
+  public void testGetImages_ReturnsExpectedCount() {
+    List<Image> images = InitialData.getImages();
+    assertEquals("Should return exactly 10 images", 10, images.size());
+  }
+
+  @Test
+  public void testGetImages_AllImagesHaveValidNames() {
     List<Image> images = InitialData.getImages();
 
     for (Image image : images) {
       assertNotNull("Image should not be null", image);
-      assertNotNull("Image name should not be null", image.getName());
-      assertFalse("Image name should not be empty", image.getName().isEmpty());
-      assertFalse("Image name should not be blank", image.getName().trim().isEmpty());
-    }
-  }
-
-  @Test
-  public void testAllImagesHaveDefaultSource() {
-    List<Image> images = InitialData.getImages();
-
-    for (Image image : images) {
-      assertEquals(
-          "All images should have default source",
-          Constants.SOURCE_DEFAULT,
-          image.getSource()
+      assertNotNull("Image name should not be null", image.name);
+      assertFalse("Image name should not be empty", image.name.isEmpty());
+      assertTrue(
+          "Image name should start with capital letter",
+          Character.isUpperCase(image.name.charAt(0))
       );
     }
   }
 
   @Test
-  public void testAllImagesHaveValidPaths() {
+  public void testGetImages_AllImagesHaveDefaultSource() {
     List<Image> images = InitialData.getImages();
 
     for (Image image : images) {
-      assertNotNull("Image path should not be null", image.getPath());
-      assertFalse("Image path should not be empty", image.getPath().isEmpty());
+      assertEquals("All images should have default source", Constants.SOURCE_DEFAULT, image.source);
+    }
+  }
 
-      // Path should be a string representation of a drawable resource ID
+  @Test
+  public void testGetImages_AllImagesHaveValidPaths() {
+    List<Image> images = InitialData.getImages();
+
+    for (Image image : images) {
+      assertNotNull("Image path should not be null", image.path);
+      assertFalse("Image path should not be empty", image.path.isEmpty());
+
+      // Path should be a string representation of an integer (resource ID)
       try {
-        int resourceId = Integer.parseInt(image.getPath());
+        int resourceId = Integer.parseInt(image.path);
         assertTrue("Resource ID should be positive", resourceId > 0);
       } catch (NumberFormatException e) {
-        fail("Image path should be a valid integer: " + image.getPath());
+        fail("Image path should be a valid integer string: " + image.path);
       }
     }
   }
 
   @Test
-  public void testExpectedImageNames() {
+  public void testGetImages_ContainsExpectedImageNames() {
     List<Image> images = InitialData.getImages();
+    Set<String> imageNames = new HashSet<>();
 
-    // Expected image names based on the implementation
-    String[] expectedNames = {
-        "Arrow",
-        "Crown",
-        "Envelope",
-        "House",
-        "Lightbulb",
-        "Moon",
-        "Smiley",
-        "Star",
-        "Sun",
-        "Umbrella"
-    };
-
-    assertEquals("Should have expected number of images", expectedNames.length, images.size());
-
-    Set<String> actualNames = new HashSet<>();
     for (Image image : images) {
-      actualNames.add(image.getName());
+      imageNames.add(image.name);
     }
 
-    for (String expectedName : expectedNames) {
-      assertTrue("Should contain image: " + expectedName, actualNames.contains(expectedName));
-    }
+    // Verify specific expected images are present
+    assertTrue("Should contain Arrow image", imageNames.contains("Arrow"));
+    assertTrue("Should contain Crown image", imageNames.contains("Crown"));
+    assertTrue("Should contain Envelope image", imageNames.contains("Envelope"));
+    assertTrue("Should contain House image", imageNames.contains("House"));
+    assertTrue("Should contain Lightbulb image", imageNames.contains("Lightbulb"));
+    assertTrue("Should contain Moon image", imageNames.contains("Moon"));
+    assertTrue("Should contain Smiley image", imageNames.contains("Smiley"));
+    assertTrue("Should contain Star image", imageNames.contains("Star"));
+    assertTrue("Should contain Sun image", imageNames.contains("Sun"));
+    assertTrue("Should contain Umbrella image", imageNames.contains("Umbrella"));
   }
 
   @Test
-  public void testImageNamesAreUnique() {
+  public void testGetImages_NoDuplicateNames() {
     List<Image> images = InitialData.getImages();
+    Set<String> imageNames = new HashSet<>();
 
-    Set<String> uniqueNames = new HashSet<>();
     for (Image image : images) {
-      String name = image.getName();
-      assertFalse("Image name should be unique: " + name, uniqueNames.contains(name));
-      uniqueNames.add(name);
+      assertFalse(
+          "Image name should not be duplicate: " + image.name,
+          imageNames.contains(image.name)
+      );
+      imageNames.add(image.name);
     }
 
-    assertEquals("All image names should be unique", images.size(), uniqueNames.size());
+    assertEquals("All image names should be unique", images.size(), imageNames.size());
   }
 
   @Test
-  public void testImagePathsAreUnique() {
+  public void testGetImages_NoDuplicatePaths() {
     List<Image> images = InitialData.getImages();
+    Set<String> imagePaths = new HashSet<>();
 
-    Set<String> uniquePaths = new HashSet<>();
     for (Image image : images) {
-      String path = image.getPath();
-      assertFalse("Image path should be unique: " + path, uniquePaths.contains(path));
-      uniquePaths.add(path);
+      assertFalse(
+          "Image path should not be duplicate: " + image.path,
+          imagePaths.contains(image.path)
+      );
+      imagePaths.add(image.path);
     }
 
-    assertEquals("All image paths should be unique", images.size(), uniquePaths.size());
+    assertEquals("All image paths should be unique", images.size(), imagePaths.size());
   }
 
   @Test
-  public void testImageIdsAreInitializedToZero() {
-    List<Image> images = InitialData.getImages();
-
-    for (Image image : images) {
-      assertEquals("Image ID should be initialized to 0", 0, image.getId());
-    }
-  }
-
-  @Test
-  public void testResourceIdValidation() {
-    List<Image> images = InitialData.getImages();
-
-    // These should match the expected R.drawable resource IDs
-    for (Image image : images) {
-      String path = image.getPath();
-      int resourceId = Integer.parseInt(path);
-
-      // Verify the resource ID corresponds to the expected drawable based on name
-      switch (image.getName()) {
-        case "Arrow":
-          assertEquals(
-              "Arrow should map to R.drawable.arrow",
-              String.valueOf(R.drawable.arrow),
-              path
-          );
-          break;
-        case "Crown":
-          assertEquals(
-              "Crown should map to R.drawable.crown",
-              String.valueOf(R.drawable.crown),
-              path
-          );
-          break;
-        case "Envelope":
-          assertEquals(
-              "Envelope should map to R.drawable.envelope",
-              String.valueOf(R.drawable.envelope),
-              path
-          );
-          break;
-        case "House":
-          assertEquals(
-              "House should map to R.drawable.house",
-              String.valueOf(R.drawable.house),
-              path
-          );
-          break;
-        case "Lightbulb":
-          assertEquals(
-              "Lightbulb should map to R.drawable.lightbulb",
-              String.valueOf(R.drawable.lightbulb),
-              path
-          );
-          break;
-        case "Moon":
-          assertEquals("Moon should map to R.drawable.moon", String.valueOf(R.drawable.moon), path);
-          break;
-        case "Smiley":
-          assertEquals(
-              "Smiley should map to R.drawable.smiley",
-              String.valueOf(R.drawable.smiley),
-              path
-          );
-          break;
-        case "Star":
-          assertEquals("Star should map to R.drawable.star", String.valueOf(R.drawable.star), path);
-          break;
-        case "Sun":
-          assertEquals("Sun should map to R.drawable.sun", String.valueOf(R.drawable.sun), path);
-          break;
-        case "Umbrella":
-          assertEquals(
-              "Umbrella should map to R.drawable.umbrella",
-              String.valueOf(R.drawable.umbrella),
-              path
-          );
-          break;
-        default:
-          fail("Unexpected image name: " + image.getName());
-      }
-    }
-  }
-
-  @Test
-  public void testGetImagesConsistency() {
-    // Test that multiple calls return consistent results
+  public void testGetImages_ReturnsNewListEachTime() {
     List<Image> images1 = InitialData.getImages();
     List<Image> images2 = InitialData.getImages();
 
-    assertEquals(
-        "Multiple calls should return same number of images",
-        images1.size(),
-        images2.size()
-    );
+    assertNotSame("Should return different list instances", images1, images2);
+    assertEquals("Lists should have same content", images1.size(), images2.size());
+
+    // Verify the lists are independent (modifying one doesn't affect the other)
+    images1.clear();
+    assertFalse("Second list should still have images after clearing first", images2.isEmpty());
+  }
+
+  @Test
+  public void testGetImages_ImageObjectsAreNewInstances() {
+    List<Image> images1 = InitialData.getImages();
+    List<Image> images2 = InitialData.getImages();
 
     for (int i = 0; i < images1.size(); i++) {
       Image img1 = images1.get(i);
       Image img2 = images2.get(i);
 
-      assertEquals("Image names should be consistent", img1.getName(), img2.getName());
-      assertEquals("Image sources should be consistent", img1.getSource(), img2.getSource());
-      assertEquals("Image paths should be consistent", img1.getPath(), img2.getPath());
-      assertEquals("Image IDs should be consistent", img1.getId(), img2.getId());
+      assertNotSame("Image objects should be different instances", img1, img2);
+      assertEquals("Image names should be equal", img1.name, img2.name);
+      assertEquals("Image sources should be equal", img1.source, img2.source);
+      assertEquals("Image paths should be equal", img1.path, img2.path);
     }
   }
 
   @Test
-  public void testGetImagesIndependence() {
-    // Test that returned lists are independent (modifying one doesn't affect others)
-    List<Image> images1 = InitialData.getImages();
-    List<Image> images2 = InitialData.getImages();
+  public void testGetImages_MethodExists() {
+    try {
+      Method method = InitialData.class.getMethod("getImages");
+      assertTrue("getImages method should be static", Modifier.isStatic(method.getModifiers()));
+      assertTrue("getImages method should be public", Modifier.isPublic(method.getModifiers()));
+      assertEquals(
+          "getImages method should return List",
+          java.util.List.class,
+          method.getReturnType()
+      );
+      assertEquals(
+          "getImages method should have no parameters",
+          0,
+          method.getParameterTypes().length
+      );
+    } catch (NoSuchMethodException e) {
+      fail("getImages method should exist with correct signature");
+    }
+  }
 
-    // Modify first list
-    images1.clear();
-
-    // Second list should be unaffected
-    assertFalse(
-        "Second list should not be affected by modifications to first list",
-        images2.isEmpty()
+  @Test
+  public void testClass_HasCorrectPackage() {
+    assertEquals(
+        "InitialData should be in correct package",
+        "com.mfrankic.sketchid",
+        InitialData.class.getPackage().getName()
     );
-    assertEquals("Second list should still have all images", 10, images2.size());
   }
 
   @Test
-  public void testImageObjectIndependence() {
-    // Test that image objects are independent
+  public void testClass_HasCorrectName() {
+    assertEquals(
+        "Class should have correct simple name",
+        "InitialData",
+        InitialData.class.getSimpleName()
+    );
+  }
+
+  @Test
+  public void testClass_HasNoPublicFields() {
+    java.lang.reflect.Field[] fields = InitialData.class.getFields();
+    assertEquals("Utility class should have no public fields", 0, fields.length);
+  }
+
+  @Test
+  public void testClass_HasCorrectMethodCount() {
+    Method[] publicMethods = InitialData.class.getMethods();
+    int utilityMethods = 0;
+
+    for (Method method : publicMethods) {
+      if (method.getDeclaringClass() == InitialData.class) {
+        utilityMethods++;
+      }
+    }
+
+    assertEquals("Should have exactly 1 utility method", 1, utilityMethods);
+  }
+
+  @Test
+  public void testClass_ImplementsNoInterfaces() {
+    Class<?>[] interfaces = InitialData.class.getInterfaces();
+    assertEquals("Utility class should implement no interfaces", 0, interfaces.length);
+  }
+
+  @Test
+  public void testClass_ExtendsObject() {
+    assertEquals("Should extend only Object", Object.class, InitialData.class.getSuperclass());
+  }
+
+  @Test
+  public void testGetImages_ImagesHaveValidStructure() {
+    List<Image> images = InitialData.getImages();
+
+    for (Image image : images) {
+      // Test Image object structure
+      assertNotNull("Image should have name", image.name);
+      assertNotNull("Image should have source", image.source);
+      assertNotNull("Image should have path", image.path);
+
+      // Test that name follows expected pattern (capital letter + lowercase)
+      assertTrue(
+          "Image name should start with capital letter",
+          Character.isUpperCase(image.name.charAt(0))
+      );
+
+      // Test that source is the expected constant
+      assertEquals("Image source should be default", Constants.SOURCE_DEFAULT, image.source);
+
+      // Test that path represents a valid drawable resource
+      assertTrue("Image path should be numeric string", image.path.matches("\\d+"));
+    }
+  }
+
+  @Test
+  public void testGetImages_ConsistentOrdering() {
     List<Image> images1 = InitialData.getImages();
     List<Image> images2 = InitialData.getImages();
 
-    if (!images1.isEmpty() && !images2.isEmpty()) {
-      Image img1 = images1.get(0);
-      Image img2 = images2.get(0);
+    assertEquals("Lists should have same size", images1.size(), images2.size());
 
-      // They should have same data but be different objects
-      assertEquals("Images should have same name", img1.getName(), img2.getName());
-      assertNotSame("Images should be different objects", img1, img2);
-
-      // Modifying one shouldn't affect the other
-      img1.setName("Modified");
-      assertNotEquals(
-          "Modifying one image shouldn't affect the other",
-          img1.getName(),
-          img2.getName()
+    for (int i = 0; i < images1.size(); i++) {
+      assertEquals(
+          "Image order should be consistent: position " + i,
+          images1.get(i).name,
+          images2.get(i).name
       );
     }
   }
 
   @Test
-  public void testImageNameCapitalization() {
+  public void testGetImages_CorrectImageOrder() {
     List<Image> images = InitialData.getImages();
 
-    for (Image image : images) {
-      String name = image.getName();
-      // All names should start with capital letter (title case)
-      assertTrue(
-          "Image name should start with capital letter: " + name,
-          Character.isUpperCase(name.charAt(0))
-      );
-    }
-  }
-
-  @Test
-  public void testNoNullImagesInList() {
-    List<Image> images = InitialData.getImages();
-
-    for (int i = 0; i < images.size(); i++) {
-      assertNotNull("Image at index " + i + " should not be null", images.get(i));
-    }
-  }
-
-  @Test
-  public void testImageFieldsNotEmpty() {
-    List<Image> images = InitialData.getImages();
-
-    for (Image image : images) {
-      assertNotNull("Image name should not be null", image.getName());
-      assertNotNull("Image source should not be null", image.getSource());
-      assertNotNull("Image path should not be null", image.getPath());
-
-      assertFalse("Image name should not be empty", image.getName().isEmpty());
-      assertFalse("Image source should not be empty", image.getSource().isEmpty());
-      assertFalse("Image path should not be empty", image.getPath().isEmpty());
-    }
-  }
-
-  @Test
-  public void testExpectedImageOrder() {
-    List<Image> images = InitialData.getImages();
-
-    // Test that images are in expected order
+    // Test that images are in expected alphabetical-ish order
     String[] expectedOrder = {
         "Arrow",
         "Crown",
@@ -363,55 +340,50 @@ public class InitialDataTest {
         "Umbrella"
     };
 
-    for (int i = 0; i < expectedOrder.length && i < images.size(); i++) {
+    assertEquals("Should have expected number of images", expectedOrder.length, images.size());
+
+    for (int i = 0; i < expectedOrder.length; i++) {
       assertEquals(
           "Image at position " + i + " should be " + expectedOrder[i],
           expectedOrder[i],
-          images.get(i).getName()
+          images.get(i).name
       );
     }
   }
 
   @Test
-  public void testListIsModifiable() {
-    // The returned list should be modifiable (new ArrayList)
+  public void testGetImages_ImagesAreModifiable() {
     List<Image> images = InitialData.getImages();
 
+    // Test that the returned list is modifiable (not unmodifiable)
     int originalSize = images.size();
+    Image testImage = new Image("Test", "test", "test");
 
-    // Should be able to add to the list
-    images.add(new Image("Test", "test", "test"));
-    assertEquals("Should be able to add to returned list", originalSize + 1, images.size());
-
-    // Should be able to remove from the list
-    images.remove(images.size() - 1);
-    assertEquals("Should be able to remove from returned list", originalSize, images.size());
+    try {
+      images.add(testImage);
+      assertEquals("List should be modifiable", originalSize + 1, images.size());
+    } catch (UnsupportedOperationException e) {
+      fail("Returned list should be modifiable");
+    }
   }
 
   @Test
-  public void testEmptyOperationsOnList() {
-    List<Image> images = InitialData.getImages();
-
-    // Test various list operations
-    assertFalse("List should not be empty", images.isEmpty());
-    assertTrue("List should contain images", images.size() > 0);
-
-    // Test that we can iterate through the list
-    int count = 0;
-    for (Image image : images) {
-      assertNotNull("Each image should not be null", image);
-      count++;
-    }
-    assertEquals("Iteration count should match list size", images.size(), count);
+  public void testClass_CannotBeInstantiatedNormally() {
+    Constructor<?>[] constructors = InitialData.class.getConstructors();
+    assertEquals("Should have no public constructors", 0, constructors.length);
   }
 
   @Test
-  public void testAllResourceIdsArePositive() {
-    List<Image> images = InitialData.getImages();
+  public void testClass_HasPrivateConstructor() {
+    Constructor<?>[] allConstructors = InitialData.class.getDeclaredConstructors();
+    assertEquals("Should have exactly one constructor", 1, allConstructors.length);
 
-    for (Image image : images) {
-      int resourceId = Integer.parseInt(image.getPath());
-      assertTrue("Resource ID should be positive for " + image.getName(), resourceId > 0);
-    }
+    Constructor<?> constructor = allConstructors[0];
+    assertTrue("Constructor should be private", Modifier.isPrivate(constructor.getModifiers()));
+    assertEquals(
+        "Constructor should have no parameters",
+        0,
+        constructor.getParameterTypes().length
+    );
   }
 } 

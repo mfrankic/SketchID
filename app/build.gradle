@@ -19,6 +19,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            testCoverageEnabled = true
+        }
         release {
             minifyEnabled = false
             proguardFiles(getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro')
@@ -48,10 +51,34 @@ jacoco {
     toolVersion = "0.8.11"
 }
 
+// Common file filter for all coverage reports
+def coverageExclusions = [
+        '**/R.class',
+        '**/R$*.class',
+        '**/BuildConfig.*',
+        '**/Manifest*.*',
+        '**/*Test*.*',
+        '**/*Tests*.*',
+        'android/**/*.*',
+        '**/databinding/**/*.*',
+        '**/BR.class'
+]
+
+// Common source and class directories
+def coverageSourceDirs = [
+        "${project.projectDir}/src/main/java"
+]
+
+def coverageClassDirs = fileTree(
+        dir: layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes"),
+        excludes: coverageExclusions
+)
+
+// Unit test coverage only
 tasks.register('jacocoTestReport', JacocoReport) {
     dependsOn['testDebugUnitTest']
     group = "Reporting"
-    description = "Generate Jacoco coverage reports."
+    description = "Generate Jacoco coverage reports for unit tests only."
 
     reports {
         xml.required = true
@@ -60,27 +87,67 @@ tasks.register('jacocoTestReport', JacocoReport) {
         html.outputLocation = layout.buildDirectory.dir("reports/jacoco/test/html")
     }
 
-    def fileFilter = [
-            '**/R.class',
-            '**/R$*.class',
-            '**/BuildConfig.*',
-            '**/Manifest*.*',
-            '**/*Test*.*',
-            'android/**/*.*'
-    ]
+    sourceDirectories.from = files(coverageSourceDirs)
+    classDirectories.from = files([coverageClassDirs])
+    executionData.from = fileTree(dir: layout.buildDirectory.dir("outputs/unit_test_code_coverage"), includes: ["**/*.exec"])
+}
 
-    sourceDirectories.from = files([
-            "${project.projectDir}/src/main/java"
+// Unit test coverage (same as jacocoTestReport, kept for compatibility)
+tasks.register('jacocoCombinedTestReport', JacocoReport) {
+    dependsOn(['testDebugUnitTest'])
+    group = "Reporting"
+    description = "Generate Jacoco coverage reports for unit tests (alias for compatibility)."
+
+    reports {
+        xml.required = true
+        html.required = true
+        csv.required = true
+        xml.outputLocation = layout.buildDirectory.file("reports/jacoco/combined/jacocoCombinedTestReport.xml")
+        html.outputLocation = layout.buildDirectory.dir("reports/jacoco/combined/html")
+        csv.outputLocation = layout.buildDirectory.file("reports/jacoco/combined/jacocoCombinedTestReport.csv")
+    }
+
+    sourceDirectories.from = files(coverageSourceDirs)
+    classDirectories.from = files([coverageClassDirs])
+
+    // Unit test execution data only
+    executionData.from = files([
+            fileTree(dir: layout.buildDirectory.dir("outputs/unit_test_code_coverage"), includes: ["**/*.exec"])
     ])
+}
 
-    classDirectories.from = files([
-            fileTree(dir: layout.buildDirectory.dir("intermediates/javac/debug/compileDebugJavaWithJavac/classes"), excludes: fileFilter)
-    ])
+// Task to clean all coverage reports
+tasks.register('cleanCoverageReports', Delete) {
+    group = "Reporting"
+    description = "Clean all Jacoco coverage reports."
+    delete layout.buildDirectory.dir("reports/jacoco")
+}
 
-    executionData.from = fileTree(dir: layout.buildDirectory.dir("jacoco"), includes: ["**/*.exec"])
+// Task to run all tests and generate combined coverage
+tasks.register('fullTestCoverage') {
+    dependsOn(['cleanCoverageReports', 'testDebugUnitTest', 'jacocoCombinedTestReport'])
+    group = "Reporting"
+    description = "Run unit tests and generate coverage report (full coverage)."
+
+    // Ensure proper task ordering
+    tasks.named('testDebugUnitTest').get().mustRunAfter('cleanCoverageReports')
+    tasks.named('jacocoCombinedTestReport').get().mustRunAfter('testDebugUnitTest')
+}
+
+// Task to run unit tests and generate coverage
+tasks.register('unitTestCoverage') {
+    dependsOn(['testDebugUnitTest', 'jacocoTestReport'])
+    group = "Reporting"
+    description = "Run unit tests and generate coverage report."
+
+    tasks.named('jacocoTestReport').get().mustRunAfter('testDebugUnitTest')
 }
 
 tasks.named('jacocoTestReport') {
+    mustRunAfter 'testDebugUnitTest'
+}
+
+tasks.named('jacocoCombinedTestReport') {
     mustRunAfter 'testDebugUnitTest'
 }
 
@@ -101,13 +168,6 @@ dependencies {
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.inline)
     testImplementation(libs.robolectric)
-
-    androidTestImplementation(libs.ext.junit)
-    androidTestImplementation(libs.espresso.core)
-    androidTestImplementation(libs.runner)
-    androidTestImplementation(libs.rules)
-    androidTestImplementation(libs.espresso.intents)
-    androidTestImplementation(libs.room.testing)
 
     annotationProcessor(libs.room.compiler)
     annotationProcessor(libs.glide.compiler)

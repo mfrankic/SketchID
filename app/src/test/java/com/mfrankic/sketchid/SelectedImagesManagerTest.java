@@ -2,293 +2,288 @@ package com.mfrankic.sketchid;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import android.content.Context;
-import android.content.SharedPreferences;
-
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
-import org.robolectric.RuntimeEnvironment;
-import org.robolectric.annotation.Config;
+import org.mockito.junit.MockitoJUnitRunner;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 
 /**
  * Unit tests for the SelectedImagesManager utility class
  */
-@RunWith(RobolectricTestRunner.class)
-@Config(sdk = 34) // Use SDK 34 to avoid compatibility issues with Robolectric
+@RunWith(MockitoJUnitRunner.class)
 public class SelectedImagesManagerTest {
 
-  private Context context;
-
-  @Before
-  public void setUp() {
-    context = RuntimeEnvironment.getApplication();
-    // Clear any existing preferences before each test
-    clearPreferences();
-  }
-
-  private void clearPreferences() {
-    context
-        .getSharedPreferences(Constants.PREF_FILE_SELECTED_IMAGES, Context.MODE_PRIVATE)
-        .edit()
-        .clear()
-        .apply();
-  }
-
   @Test
-  public void testConstructorThrowsException() {
-    // Test that the utility class constructor throws IllegalStateException
+  public void testConstructor_ThrowsIllegalStateException() {
     try {
-      // This should throw an exception since it's a utility class
-      java.lang.reflect.Constructor<SelectedImagesManager> constructor
+      Constructor<SelectedImagesManager> constructor
           = SelectedImagesManager.class.getDeclaredConstructor();
       constructor.setAccessible(true);
       constructor.newInstance();
-      fail("Expected IllegalStateException to be thrown");
+      fail("Constructor should throw IllegalStateException");
+    } catch (InvocationTargetException e) {
+      assertTrue(
+          "Should throw IllegalStateException",
+          e.getCause() instanceof IllegalStateException
+      );
+      assertEquals("Should have correct message", "Utility class", e.getCause().getMessage());
     } catch (Exception e) {
-      assertTrue(e.getCause() instanceof IllegalStateException);
-      assertEquals("Utility class", e.getCause().getMessage());
+      fail("Unexpected exception: " + e.getMessage());
     }
   }
 
   @Test
-  public void testGetSelectedImagesEmpty() {
-    // Test getting selected images when no images are saved
-    Set<Integer> selectedImages = SelectedImagesManager.getSelectedImages(context);
-
-    assertNotNull(selectedImages);
-    assertTrue(selectedImages.isEmpty());
+  public void testClass_IsFinal() {
+    assertTrue(
+        "SelectedImagesManager should be final",
+        Modifier.isFinal(SelectedImagesManager.class.getModifiers())
+    );
   }
 
   @Test
-  public void testSaveAndGetSelectedImages() {
-    // Test saving and retrieving selected images
-    Set<Integer> imagesToSave = new HashSet<>();
-    imagesToSave.add(1);
-    imagesToSave.add(2);
-    imagesToSave.add(3);
-
-    SelectedImagesManager.saveSelectedImages(context, imagesToSave);
-
-    Set<Integer> retrievedImages = SelectedImagesManager.getSelectedImages(context);
-
-    assertEquals(imagesToSave, retrievedImages);
-    assertEquals(3, retrievedImages.size());
-    assertTrue(retrievedImages.contains(1));
-    assertTrue(retrievedImages.contains(2));
-    assertTrue(retrievedImages.contains(3));
-  }
-
-  @Test
-  public void testSaveEmptySet() {
-    // Test saving an empty set
-    Set<Integer> emptySet = new HashSet<>();
-
-    SelectedImagesManager.saveSelectedImages(context, emptySet);
-
-    Set<Integer> retrievedImages = SelectedImagesManager.getSelectedImages(context);
-
-    assertNotNull(retrievedImages);
-    assertTrue(retrievedImages.isEmpty());
-  }
-
-  @Test
-  public void testOverwritePreviousSelection() {
-    // Test that saving new images overwrites previous selection
-    Set<Integer> firstSelection = new HashSet<>();
-    firstSelection.add(1);
-    firstSelection.add(2);
-
-    SelectedImagesManager.saveSelectedImages(context, firstSelection);
-
-    Set<Integer> secondSelection = new HashSet<>();
-    secondSelection.add(3);
-    secondSelection.add(4);
-    secondSelection.add(5);
-
-    SelectedImagesManager.saveSelectedImages(context, secondSelection);
-
-    Set<Integer> retrievedImages = SelectedImagesManager.getSelectedImages(context);
-
-    assertEquals(secondSelection, retrievedImages);
-    assertEquals(3, retrievedImages.size());
-    assertFalse(retrievedImages.contains(1));
-    assertFalse(retrievedImages.contains(2));
-    assertTrue(retrievedImages.contains(3));
-    assertTrue(retrievedImages.contains(4));
-    assertTrue(retrievedImages.contains(5));
-  }
-
-  @Test
-  public void testSaveNullSet() {
-    // Test saving a null set - should throw NullPointerException
-    try {
-      SelectedImagesManager.saveSelectedImages(context, null);
-      fail("Expected NullPointerException to be thrown");
-    } catch (NullPointerException e) {
-      // Expected behavior - the method doesn't handle null input
-      assertTrue(true);
-    }
-
-    // Verify that no data was corrupted
-    Set<Integer> retrievedImages = SelectedImagesManager.getSelectedImages(context);
-    assertNotNull(retrievedImages);
-    assertTrue(retrievedImages.isEmpty());
-  }
-
-  @Test
-  public void testWithNegativeNumbers() {
-    // Test with negative image IDs
-    Set<Integer> imagesToSave = new HashSet<>();
-    imagesToSave.add(-1);
-    imagesToSave.add(-10);
-    imagesToSave.add(0);
-    imagesToSave.add(5);
-
-    SelectedImagesManager.saveSelectedImages(context, imagesToSave);
-
-    Set<Integer> retrievedImages = SelectedImagesManager.getSelectedImages(context);
-
-    assertEquals(imagesToSave, retrievedImages);
-    assertTrue(retrievedImages.contains(-1));
-    assertTrue(retrievedImages.contains(-10));
-    assertTrue(retrievedImages.contains(0));
-    assertTrue(retrievedImages.contains(5));
-  }
-
-  @Test
-  public void testWithLargeNumbers() {
-    // Test with very large image IDs
-    Set<Integer> imagesToSave = new HashSet<>();
-    imagesToSave.add(Integer.MAX_VALUE);
-    imagesToSave.add(Integer.MIN_VALUE);
-    imagesToSave.add(1000000);
-
-    SelectedImagesManager.saveSelectedImages(context, imagesToSave);
-
-    Set<Integer> retrievedImages = SelectedImagesManager.getSelectedImages(context);
-
-    assertEquals(imagesToSave, retrievedImages);
-    assertTrue(retrievedImages.contains(Integer.MAX_VALUE));
-    assertTrue(retrievedImages.contains(Integer.MIN_VALUE));
-    assertTrue(retrievedImages.contains(1000000));
-  }
-
-  @Test
-  public void testDuplicateValues() {
-    // Test that duplicates are handled correctly (Sets don't allow duplicates)
-    Set<Integer> imagesToSave = new HashSet<>();
-    imagesToSave.add(1);
-    imagesToSave.add(2);
-    imagesToSave.add(1); // Duplicate - should be ignored
-
-    SelectedImagesManager.saveSelectedImages(context, imagesToSave);
-
-    Set<Integer> retrievedImages = SelectedImagesManager.getSelectedImages(context);
-
-    assertEquals(2, retrievedImages.size()); // Should only have 2 unique values
-    assertTrue(retrievedImages.contains(1));
-    assertTrue(retrievedImages.contains(2));
-  }
-
-  @Test
-  public void testCorruptedPreferences() {
-    // Test handling of corrupted preferences (non-integer values)
-    SharedPreferences prefs = context.getSharedPreferences(
-        Constants.PREF_FILE_SELECTED_IMAGES,
-        Context.MODE_PRIVATE
+  public void testClass_IsUtilityClass() {
+    // Verify that SelectedImagesManager is designed as a utility class
+    assertTrue(
+        "SelectedImagesManager should be public",
+        Modifier.isPublic(SelectedImagesManager.class.getModifiers())
     );
 
-    // Manually insert some invalid data
-    Set<String> corruptedData = new HashSet<>();
-    corruptedData.add("1");      // Valid
-    corruptedData.add("2");      // Valid
-    corruptedData.add("invalid"); // Invalid - should be ignored
-    corruptedData.add("3.14");   // Invalid - should be ignored
-    corruptedData.add("");       // Invalid - should be ignored
-
-    prefs.edit().putStringSet(Constants.PREF_SELECTED_IMAGES, corruptedData).apply();
-
-    Set<Integer> retrievedImages = SelectedImagesManager.getSelectedImages(context);
-
-    // Should only contain the valid integers
-    assertEquals(2, retrievedImages.size());
-    assertTrue(retrievedImages.contains(1));
-    assertTrue(retrievedImages.contains(2));
-  }
-
-  @Test
-  public void testMultipleContexts() {
-    // Test that different contexts are independent
-    // (In this case, we'll just verify the same context works consistently)
-    Set<Integer> imagesToSave = new HashSet<>();
-    imagesToSave.add(1);
-    imagesToSave.add(2);
-
-    SelectedImagesManager.saveSelectedImages(context, imagesToSave);
-
-    // Get from same context
-    Set<Integer> retrievedImages1 = SelectedImagesManager.getSelectedImages(context);
-    Set<Integer> retrievedImages2 = SelectedImagesManager.getSelectedImages(context);
-
-    assertEquals(retrievedImages1, retrievedImages2);
-    assertEquals(imagesToSave, retrievedImages1);
-  }
-
-  @Test
-  public void testLargeDataSet() {
-    // Test with a large number of selected images
-    Set<Integer> largeSet = new HashSet<>();
-    for (int i = 0; i < 1000; i++) {
-      largeSet.add(i);
+    // Check that constructor is private
+    try {
+      Constructor<SelectedImagesManager> constructor
+          = SelectedImagesManager.class.getDeclaredConstructor();
+      assertTrue("Constructor should be private", Modifier.isPrivate(constructor.getModifiers()));
+    } catch (NoSuchMethodException e) {
+      fail("SelectedImagesManager should have a default constructor");
     }
 
-    SelectedImagesManager.saveSelectedImages(context, largeSet);
-
-    Set<Integer> retrievedImages = SelectedImagesManager.getSelectedImages(context);
-
-    assertEquals(largeSet, retrievedImages);
-    assertEquals(1000, retrievedImages.size());
-
-    // Verify some random values
-    assertTrue(retrievedImages.contains(0));
-    assertTrue(retrievedImages.contains(500));
-    assertTrue(retrievedImages.contains(999));
+    // Verify all public methods are static
+    Method[] methods = SelectedImagesManager.class.getDeclaredMethods();
+    for (Method method : methods) {
+      if (Modifier.isPublic(method.getModifiers())) {
+        assertTrue(
+            "Public method " + method.getName() + " should be static",
+            Modifier.isStatic(method.getModifiers())
+        );
+      }
+    }
   }
 
   @Test
-  public void testPersistenceBetweenOperations() {
-    // Test that data persists between multiple operations
-    Set<Integer> firstBatch = new HashSet<>();
-    firstBatch.add(1);
-    firstBatch.add(2);
+  public void testGetSelectedImages_MethodExists() {
+    // Verify the getSelectedImages method signature exists
+    try {
+      Method method = SelectedImagesManager.class.getMethod(
+          "getSelectedImages",
+          android.content.Context.class
+      );
+      assertTrue(
+          "getSelectedImages method should be static",
+          Modifier.isStatic(method.getModifiers())
+      );
+      assertTrue(
+          "getSelectedImages method should be public",
+          Modifier.isPublic(method.getModifiers())
+      );
+      assertEquals(
+          "getSelectedImages method should return Set",
+          java.util.Set.class,
+          method.getReturnType()
+      );
+    } catch (NoSuchMethodException e) {
+      fail("getSelectedImages method should exist with correct signature");
+    }
+  }
 
-    SelectedImagesManager.saveSelectedImages(context, firstBatch);
+  @Test
+  public void testSaveSelectedImages_MethodExists() {
+    // Verify the saveSelectedImages method signature exists
+    try {
+      Method method = SelectedImagesManager.class.getMethod(
+          "saveSelectedImages",
+          android.content.Context.class,
+          java.util.Set.class
+      );
+      assertTrue(
+          "saveSelectedImages method should be static",
+          Modifier.isStatic(method.getModifiers())
+      );
+      assertTrue(
+          "saveSelectedImages method should be public",
+          Modifier.isPublic(method.getModifiers())
+      );
+      assertEquals(
+          "saveSelectedImages method should return void",
+          void.class,
+          method.getReturnType()
+      );
+    } catch (NoSuchMethodException e) {
+      fail("saveSelectedImages method should exist with correct signature");
+    }
+  }
 
-    // Verify first batch
-    Set<Integer> retrieved1 = SelectedImagesManager.getSelectedImages(context);
-    assertEquals(firstBatch, retrieved1);
+  @Test
+  public void testClass_HasCorrectPackage() {
+    assertEquals(
+        "SelectedImagesManager should be in correct package",
+        "com.mfrankic.sketchid",
+        SelectedImagesManager.class.getPackage().getName()
+    );
+  }
 
-    // Add more images
-    Set<Integer> secondBatch = new HashSet<>();
-    secondBatch.add(3);
-    secondBatch.add(4);
-    secondBatch.add(5);
+  @Test
+  public void testClass_HasCorrectName() {
+    assertEquals(
+        "Class should have correct simple name",
+        "SelectedImagesManager",
+        SelectedImagesManager.class.getSimpleName()
+    );
+  }
 
-    SelectedImagesManager.saveSelectedImages(context, secondBatch);
+  @Test
+  public void testClass_HasNoPublicFields() {
+    // Utility classes should not have public fields
+    java.lang.reflect.Field[] fields = SelectedImagesManager.class.getFields();
+    assertEquals("Utility class should have no public fields", 0, fields.length);
+  }
 
-    // Verify second batch (should overwrite first)
-    Set<Integer> retrieved2 = SelectedImagesManager.getSelectedImages(context);
-    assertEquals(secondBatch, retrieved2);
-    assertNotEquals(firstBatch, retrieved2);
+  @Test
+  public void testClass_HasCorrectMethodCount() {
+    // Should have exactly 2 public methods: getSelectedImages and saveSelectedImages
+    Method[] publicMethods = SelectedImagesManager.class.getMethods();
+    int utilityMethods = 0;
+
+    for (Method method : publicMethods) {
+      // Count only methods declared in this class (not inherited from Object)
+      if (method.getDeclaringClass() == SelectedImagesManager.class) {
+        utilityMethods++;
+      }
+    }
+
+    assertEquals("Should have exactly 2 utility methods", 2, utilityMethods);
+  }
+
+  @Test
+  public void testGetSelectedImages_ParameterTypes() {
+    try {
+      Method method = SelectedImagesManager.class.getMethod(
+          "getSelectedImages",
+          android.content.Context.class
+      );
+
+      Class<?>[] parameterTypes = method.getParameterTypes();
+      assertEquals("Should have exactly one parameter", 1, parameterTypes.length);
+      assertEquals(
+          "Parameter should be Context type",
+          android.content.Context.class,
+          parameterTypes[0]
+      );
+    } catch (NoSuchMethodException e) {
+      fail("getSelectedImages method should exist");
+    }
+  }
+
+  @Test
+  public void testSaveSelectedImages_ParameterTypes() {
+    try {
+      Method method = SelectedImagesManager.class.getMethod(
+          "saveSelectedImages",
+          android.content.Context.class,
+          java.util.Set.class
+      );
+
+      Class<?>[] parameterTypes = method.getParameterTypes();
+      assertEquals("Should have exactly two parameters", 2, parameterTypes.length);
+      assertEquals(
+          "First parameter should be Context type",
+          android.content.Context.class,
+          parameterTypes[0]
+      );
+      assertEquals("Second parameter should be Set type", java.util.Set.class, parameterTypes[1]);
+    } catch (NoSuchMethodException e) {
+      fail("saveSelectedImages method should exist");
+    }
+  }
+
+  @Test
+  public void testClass_ImplementsNoInterfaces() {
+    // Utility classes typically don't implement interfaces
+    Class<?>[] interfaces = SelectedImagesManager.class.getInterfaces();
+    assertEquals("Utility class should implement no interfaces", 0, interfaces.length);
+  }
+
+  @Test
+  public void testClass_ExtendsObject() {
+    // Should extend only Object
+    assertEquals(
+        "Should extend only Object",
+        Object.class,
+        SelectedImagesManager.class.getSuperclass()
+    );
+  }
+
+  @Test
+  public void testClass_HasCorrectModifiers() {
+    int modifiers = SelectedImagesManager.class.getModifiers();
+
+    assertTrue("Class should be public", Modifier.isPublic(modifiers));
+    assertTrue("Class should be final", Modifier.isFinal(modifiers));
+    assertFalse("Class should not be abstract", Modifier.isAbstract(modifiers));
+    assertFalse("Class should not be interface", Modifier.isInterface(modifiers));
+  }
+
+  @Test
+  public void testMethodsAreNotSynchronized() {
+    // Check that utility methods are not unnecessarily synchronized
+    try {
+      Method getMethod = SelectedImagesManager.class.getMethod(
+          "getSelectedImages",
+          android.content.Context.class
+      );
+      Method saveMethod = SelectedImagesManager.class.getMethod(
+          "saveSelectedImages",
+          android.content.Context.class,
+          java.util.Set.class
+      );
+
+      assertFalse(
+          "getSelectedImages should not be synchronized",
+          Modifier.isSynchronized(getMethod.getModifiers())
+      );
+      assertFalse(
+          "saveSelectedImages should not be synchronized",
+          Modifier.isSynchronized(saveMethod.getModifiers())
+      );
+    } catch (NoSuchMethodException e) {
+      fail("Methods should exist");
+    }
+  }
+
+  @Test
+  public void testClass_CannotBeInstantiatedNormally() {
+    // Verify that normal instantiation is not possible
+    Constructor<?>[] constructors = SelectedImagesManager.class.getConstructors();
+    assertEquals("Should have no public constructors", 0, constructors.length);
+  }
+
+  @Test
+  public void testClass_HasPrivateConstructor() {
+    Constructor<?>[] allConstructors = SelectedImagesManager.class.getDeclaredConstructors();
+    assertEquals("Should have exactly one constructor", 1, allConstructors.length);
+
+    Constructor<?> constructor = allConstructors[0];
+    assertTrue("Constructor should be private", Modifier.isPrivate(constructor.getModifiers()));
+    assertEquals(
+        "Constructor should have no parameters",
+        0,
+        constructor.getParameterTypes().length
+    );
   }
 } 

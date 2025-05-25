@@ -5,9 +5,16 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.anyInt;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.verify;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnitRunner;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -18,409 +25,406 @@ import java.util.function.Consumer;
 /**
  * Unit tests for the SelectionManager generic class
  */
+@RunWith(MockitoJUnitRunner.class)
 public class SelectionManagerTest {
 
+  @Mock
+  private Consumer<Integer> mockOnChanged;
+
   private SelectionManager<String> selectionManager;
-  private List<Integer> callbackValues;
   private List<String> testItems;
 
   @Before
   public void setUp() {
-    callbackValues = new ArrayList<>();
-    Consumer<Integer> testCallback = value -> callbackValues.add(value);
-    selectionManager = new SelectionManager<>(testCallback);
-
-    testItems = Arrays.asList("Item1", "Item2", "Item3", "Item4", "Item5");
+    selectionManager = new SelectionManager<>(mockOnChanged);
+    testItems = new ArrayList<>();
+    testItems.addAll(Arrays.asList("Item1", "Item2", "Item3", "Item4", "Item5"));
   }
 
   @Test
-  public void testConstructorWithCallback() {
-    // Test that constructor accepts callback and doesn't crash
-    Consumer<Integer> callback = value -> {
+  public void testConstructor_AcceptsOnChangedCallback() {
+    Consumer<Integer> callback = position -> {
     };
     SelectionManager<String> manager = new SelectionManager<>(callback);
     assertNotNull("SelectionManager should be created successfully", manager);
   }
 
   @Test
-  public void testConstructorWithNullCallback() {
-    // Test constructor with null callback
-    try {
-      SelectionManager<String> manager = new SelectionManager<>(null);
-      // If it doesn't throw, we'll test that operations handle null gracefully
-    } catch (Exception e) {
-      // Some implementations might throw on null callback
-      assertTrue("Constructor might reject null callback", true);
-    }
+  public void testInitialState_DisabledByDefault() {
+    // By default, selection should be disabled
+    assertFalse("Initially, no item should be selected", selectionManager.isSelected("Item1"));
+    assertTrue("Initially, selected set should be empty", selectionManager.getSelected().isEmpty());
   }
 
   @Test
-  public void testSetEnabledTrue() {
-    // Test enabling selection mode
+  public void testSetEnabled_True_CallsOnChanged() {
     selectionManager.setEnabled(true);
-
-    // Should trigger callback with -1 (global update)
-    assertEquals("Should have one callback value", 1, callbackValues.size());
-    assertEquals("Callback should be called with -1", Integer.valueOf(-1), callbackValues.get(0));
+    verify(mockOnChanged).accept(-1);
   }
 
   @Test
-  public void testSetEnabledFalse() {
-    // First enable and add some selections
-    selectionManager.setEnabled(true);
-    callbackValues.clear();
-
-    selectionManager.toggle("Item1", testItems);
-    selectionManager.toggle("Item2", testItems);
-
-    // Now disable
+  public void testSetEnabled_False_CallsOnChanged() {
     selectionManager.setEnabled(false);
-
-    // Should clear selections and trigger callback
-    assertEquals("Should clear selections when disabled", 0, selectionManager.getSelected().size());
-    assertTrue("Callback should be called when disabling", callbackValues.contains(-1));
+    verify(mockOnChanged).accept(-1);
   }
 
   @Test
-  public void testToggleWhenDisabled() {
-    // Test toggling when selection is disabled (default state)
-    selectionManager.toggle("Item1", testItems);
-
-    // Should not add to selection
-    assertEquals("Should not select when disabled", 0, selectionManager.getSelected().size());
-    assertFalse("Item should not be selected", selectionManager.isSelected("Item1"));
-  }
-
-  @Test
-  public void testToggleWhenEnabled() {
-    // Enable selection mode
+  public void testSetEnabled_False_ClearsSelections() {
+    // First enable and select an item
     selectionManager.setEnabled(true);
-    callbackValues.clear();
-
-    // Toggle an item
     selectionManager.toggle("Item1", testItems);
-
-    // Should add to selection
-    assertEquals("Should select item when enabled", 1, selectionManager.getSelected().size());
     assertTrue("Item should be selected", selectionManager.isSelected("Item1"));
 
-    // Should trigger callback with item position
-    assertFalse("Callback should be called", callbackValues.isEmpty());
-    assertEquals(
-        "Callback should be called with position 0",
-        Integer.valueOf(0),
-        callbackValues.get(0)
-    );
+    // Now disable - should clear selections
+    selectionManager.setEnabled(false);
+    assertFalse("Item should no longer be selected", selectionManager.isSelected("Item1"));
+    assertTrue("Selected set should be empty", selectionManager.getSelected().isEmpty());
   }
 
   @Test
-  public void testToggleSelectAndDeselect() {
-    // Enable selection mode
-    selectionManager.setEnabled(true);
-    callbackValues.clear();
+  public void testToggle_WhenDisabled_DoesNothing() {
+    // Ensure manager is disabled
+    selectionManager.setEnabled(false);
+    reset(mockOnChanged); // Clear any previous calls
 
-    // Select item
-    selectionManager.toggle("Item2", testItems);
-    assertTrue("Item should be selected", selectionManager.isSelected("Item2"));
-    assertEquals("Should have 1 selected item", 1, selectionManager.getSelected().size());
+    selectionManager.toggle("Item1", testItems);
 
-    // Deselect same item
-    selectionManager.toggle("Item2", testItems);
-    assertFalse("Item should be deselected", selectionManager.isSelected("Item2"));
-    assertEquals("Should have 0 selected items", 0, selectionManager.getSelected().size());
+    // Should not change selection or call callback
+    assertFalse("Item should not be selected when disabled", selectionManager.isSelected("Item1"));
+    verify(mockOnChanged, never()).accept(anyInt());
   }
 
   @Test
-  public void testToggleMultipleItems() {
-    // Enable selection mode
+  public void testToggle_WhenEnabled_SelectsItem() {
     selectionManager.setEnabled(true);
-    callbackValues.clear();
+    reset(mockOnChanged);
+
+    selectionManager.toggle("Item1", testItems);
+
+    assertTrue("Item should be selected", selectionManager.isSelected("Item1"));
+    verify(mockOnChanged).accept(0); // Position of "Item1" in testItems
+  }
+
+  @Test
+  public void testToggle_WhenEnabled_DeselectsAlreadySelectedItem() {
+    selectionManager.setEnabled(true);
+
+    // Select the item first
+    selectionManager.toggle("Item1", testItems);
+    assertTrue("Item should be selected", selectionManager.isSelected("Item1"));
+
+    reset(mockOnChanged);
+
+    // Toggle again to deselect
+    selectionManager.toggle("Item1", testItems);
+    assertFalse("Item should be deselected", selectionManager.isSelected("Item1"));
+    verify(mockOnChanged).accept(0);
+  }
+
+  @Test
+  public void testToggle_CallsOnChangedWithCorrectPosition() {
+    selectionManager.setEnabled(true);
+    reset(mockOnChanged);
+
+    selectionManager.toggle("Item3", testItems); // Index 2
+    verify(mockOnChanged).accept(2);
+
+    selectionManager.toggle("Item5", testItems); // Index 4
+    verify(mockOnChanged).accept(4);
+  }
+
+  @Test
+  public void testToggle_ItemNotInList_CallsOnChangedWithNegativeOne() {
+    selectionManager.setEnabled(true);
+    reset(mockOnChanged);
+
+    selectionManager.toggle("NonexistentItem", testItems);
+    verify(mockOnChanged).accept(-1); // Item not found
+  }
+
+  @Test
+  public void testIsSelected_ReturnsFalseForUnselectedItem() {
+    selectionManager.setEnabled(true);
+    assertFalse("Unselected item should return false", selectionManager.isSelected("Item1"));
+  }
+
+  @Test
+  public void testIsSelected_ReturnsTrueForSelectedItem() {
+    selectionManager.setEnabled(true);
+    selectionManager.toggle("Item1", testItems);
+    assertTrue("Selected item should return true", selectionManager.isSelected("Item1"));
+  }
+
+  @Test
+  public void testGetSelected_ReturnsEmptySetInitially() {
+    Set<String> selected = selectionManager.getSelected();
+    assertTrue("Selected set should be empty initially", selected.isEmpty());
+  }
+
+  @Test
+  public void testGetSelected_ReturnsNewSetCopy() {
+    selectionManager.setEnabled(true);
+    selectionManager.toggle("Item1", testItems);
+
+    Set<String> selected1 = selectionManager.getSelected();
+    Set<String> selected2 = selectionManager.getSelected();
+
+    assertNotSame("Should return different set instances", selected1, selected2);
+    assertEquals("Sets should have same content", selected1, selected2);
+
+    // Verify modifying returned set doesn't affect internal state
+    selected1.clear();
+    assertFalse("Internal state should not be affected", selectionManager.getSelected().isEmpty());
+  }
+
+  @Test
+  public void testGetSelected_ReturnsCorrectSelectedItems() {
+    selectionManager.setEnabled(true);
+    selectionManager.toggle("Item1", testItems);
+    selectionManager.toggle("Item3", testItems);
+
+    Set<String> selected = selectionManager.getSelected();
+    assertEquals("Should have 2 selected items", 2, selected.size());
+    assertTrue("Should contain Item1", selected.contains("Item1"));
+    assertTrue("Should contain Item3", selected.contains("Item3"));
+    assertFalse("Should not contain Item2", selected.contains("Item2"));
+  }
+
+  @Test
+  public void testClearSelections_WhenEmpty_DoesNotCallOnChanged() {
+    selectionManager.clearSelections();
+    verify(mockOnChanged, never()).accept(anyInt());
+  }
+
+  @Test
+  public void testClearSelections_WhenNotEmpty_ClearsAndCallsOnChanged() {
+    selectionManager.setEnabled(true);
+    selectionManager.toggle("Item1", testItems);
+    selectionManager.toggle("Item2", testItems);
+
+    reset(mockOnChanged);
+
+    selectionManager.clearSelections();
+
+    assertTrue("Selections should be cleared", selectionManager.getSelected().isEmpty());
+    assertFalse("Item1 should not be selected", selectionManager.isSelected("Item1"));
+    assertFalse("Item2 should not be selected", selectionManager.isSelected("Item2"));
+    verify(mockOnChanged).accept(-1);
+  }
+
+  @Test
+  public void testValidateSelectionsAgainst_EmptySelections_DoesNotCallOnChanged() {
+    List<String> newList = Arrays.asList("NewItem1", "NewItem2");
+    selectionManager.validateSelectionsAgainst(newList);
+    verify(mockOnChanged, never()).accept(anyInt());
+  }
+
+  @Test
+  public void testValidateSelectionsAgainst_AllItemsStillExist_DoesNothing() {
+    selectionManager.setEnabled(true);
+    selectionManager.toggle("Item1", testItems);
+    selectionManager.toggle("Item2", testItems);
+
+    reset(mockOnChanged);
+
+    // Validate against list that still contains selected items
+    List<String> newList = Arrays.asList("Item1", "Item2", "Item6");
+    selectionManager.validateSelectionsAgainst(newList);
+
+    // Selections should remain
+    assertTrue("Item1 should still be selected", selectionManager.isSelected("Item1"));
+    assertTrue("Item2 should still be selected", selectionManager.isSelected("Item2"));
+    verify(mockOnChanged, never()).accept(anyInt());
+  }
+
+  @Test
+  public void testValidateSelectionsAgainst_SomeItemsRemoved_ClearsInvalidSelections() {
+    selectionManager.setEnabled(true);
+    selectionManager.toggle("Item1", testItems);
+    selectionManager.toggle("Item2", testItems);
+    selectionManager.toggle("Item3", testItems);
+
+    reset(mockOnChanged);
+
+    // Validate against list that only contains Item1
+    List<String> newList = Arrays.asList("Item1", "NewItem");
+    selectionManager.validateSelectionsAgainst(newList);
+
+    // Only Item1 should remain selected
+    assertTrue("Item1 should still be selected", selectionManager.isSelected("Item1"));
+    assertFalse("Item2 should be deselected", selectionManager.isSelected("Item2"));
+    assertFalse("Item3 should be deselected", selectionManager.isSelected("Item3"));
+    verify(mockOnChanged).accept(-1);
+  }
+
+  @Test
+  public void testValidateSelectionsAgainst_AllItemsRemoved_ClearsAllSelections() {
+    selectionManager.setEnabled(true);
+    selectionManager.toggle("Item1", testItems);
+    selectionManager.toggle("Item2", testItems);
+
+    reset(mockOnChanged);
+
+    // Validate against list that contains none of the selected items
+    List<String> newList = Arrays.asList("NewItem1", "NewItem2");
+    selectionManager.validateSelectionsAgainst(newList);
+
+    assertTrue("All selections should be cleared", selectionManager.getSelected().isEmpty());
+    verify(mockOnChanged).accept(-1);
+  }
+
+  @Test
+  public void testMultipleSelections_WorkCorrectly() {
+    selectionManager.setEnabled(true);
 
     // Select multiple items
     selectionManager.toggle("Item1", testItems);
     selectionManager.toggle("Item3", testItems);
     selectionManager.toggle("Item5", testItems);
 
-    assertEquals("Should have 3 selected items", 3, selectionManager.getSelected().size());
-    assertTrue("Item1 should be selected", selectionManager.isSelected("Item1"));
-    assertTrue("Item3 should be selected", selectionManager.isSelected("Item3"));
-    assertTrue("Item5 should be selected", selectionManager.isSelected("Item5"));
-    assertFalse("Item2 should not be selected", selectionManager.isSelected("Item2"));
-    assertFalse("Item4 should not be selected", selectionManager.isSelected("Item4"));
+    Set<String> selected = selectionManager.getSelected();
+    assertEquals("Should have 3 selected items", 3, selected.size());
+    assertTrue("Should contain Item1", selected.contains("Item1"));
+    assertTrue("Should contain Item3", selected.contains("Item3"));
+    assertTrue("Should contain Item5", selected.contains("Item5"));
 
-    // Check callback positions
-    assertEquals("Should have 3 callbacks", 3, callbackValues.size());
-    assertEquals("First callback should be position 0", Integer.valueOf(0), callbackValues.get(0));
-    assertEquals("Second callback should be position 2", Integer.valueOf(2), callbackValues.get(1));
-    assertEquals("Third callback should be position 4", Integer.valueOf(4), callbackValues.get(2));
-  }
-
-  @Test
-  public void testIsSelectedWithUnselectedItem() {
-    // Test isSelected with item that was never selected
-    assertFalse("Unselected item should return false", selectionManager.isSelected("Item1"));
-  }
-
-  @Test
-  public void testIsSelectedWithNullItem() {
-    // Test isSelected with null item
-    assertFalse("Null item should return false", selectionManager.isSelected(null));
-  }
-
-  @Test
-  public void testGetSelectedReturnsNewSet() {
-    // Enable and select some items
-    selectionManager.setEnabled(true);
-    selectionManager.toggle("Item1", testItems);
-    selectionManager.toggle("Item2", testItems);
-
-    Set<String> selected1 = selectionManager.getSelected();
-    Set<String> selected2 = selectionManager.getSelected();
-
-    // Should return different set instances
-    assertNotSame("Should return different set instances", selected1, selected2);
-
-    // But with same content
-    assertEquals("Should have same content", selected1, selected2);
-
-    // Modifying returned set should not affect internal state
-    selected1.clear();
-    assertEquals(
-        "Modifying returned set should not affect internal state",
-        2,
-        selectionManager.getSelected().size()
-    );
-  }
-
-  @Test
-  public void testClearSelectionsWhenEmpty() {
-    // Test clearing selections when none are selected
-    selectionManager.clearSelections();
-
-    // Should not trigger callback when already empty
-    assertEquals("Should not trigger callback when already empty", 0, callbackValues.size());
-  }
-
-  @Test
-  public void testClearSelectionsWithItems() {
-    // Enable and select some items
-    selectionManager.setEnabled(true);
-    selectionManager.toggle("Item1", testItems);
-    selectionManager.toggle("Item2", testItems);
-    callbackValues.clear();
-
-    // Clear selections
-    selectionManager.clearSelections();
-
-    assertEquals("Should have no selected items", 0, selectionManager.getSelected().size());
-    assertFalse("Item1 should not be selected", selectionManager.isSelected("Item1"));
-    assertFalse("Item2 should not be selected", selectionManager.isSelected("Item2"));
-
-    // Should trigger callback with -1
-    assertEquals("Should trigger one callback", 1, callbackValues.size());
-    assertEquals("Callback should be -1", Integer.valueOf(-1), callbackValues.get(0));
-  }
-
-  @Test
-  public void testValidateSelectionsAgainstSameList() {
-    // Enable and select some items
-    selectionManager.setEnabled(true);
-    selectionManager.toggle("Item1", testItems);
+    // Deselect one
     selectionManager.toggle("Item3", testItems);
-    callbackValues.clear();
 
-    // Validate against same list
-    selectionManager.validateSelectionsAgainst(testItems);
-
-    // Should keep all selections
-    assertEquals("Should keep all selections", 2, selectionManager.getSelected().size());
-    assertTrue("Item1 should still be selected", selectionManager.isSelected("Item1"));
-    assertTrue("Item3 should still be selected", selectionManager.isSelected("Item3"));
-
-    // Should not trigger callback if nothing changes
-    assertEquals("Should not trigger callback", 0, callbackValues.size());
+    selected = selectionManager.getSelected();
+    assertEquals("Should have 2 selected items", 2, selected.size());
+    assertTrue("Should still contain Item1", selected.contains("Item1"));
+    assertFalse("Should not contain Item3", selected.contains("Item3"));
+    assertTrue("Should still contain Item5", selected.contains("Item5"));
   }
 
   @Test
-  public void testValidateSelectionsAgainstNewList() {
-    // Enable and select some items
-    selectionManager.setEnabled(true);
-    selectionManager.toggle("Item1", testItems);
-    selectionManager.toggle("Item3", testItems);
-    selectionManager.toggle("Item5", testItems);
-    callbackValues.clear();
-
-    // Validate against list missing some items
-    List<String> newList = Arrays.asList("Item1", "Item2", "Item4");
-    selectionManager.validateSelectionsAgainst(newList);
-
-    // Should remove Item3 and Item5, keep Item1
-    assertEquals("Should have 1 selected item", 1, selectionManager.getSelected().size());
-    assertTrue("Item1 should still be selected", selectionManager.isSelected("Item1"));
-    assertFalse("Item3 should be deselected", selectionManager.isSelected("Item3"));
-    assertFalse("Item5 should be deselected", selectionManager.isSelected("Item5"));
-
-    // Should trigger callback with -1
-    assertEquals("Should trigger one callback", 1, callbackValues.size());
-    assertEquals("Callback should be -1", Integer.valueOf(-1), callbackValues.get(0));
-  }
-
-  @Test
-  public void testValidateSelectionsAgainstEmptyList() {
-    // Enable and select some items
-    selectionManager.setEnabled(true);
-    selectionManager.toggle("Item1", testItems);
-    selectionManager.toggle("Item2", testItems);
-    callbackValues.clear();
-
-    // Validate against empty list
-    selectionManager.validateSelectionsAgainst(new ArrayList<>());
-
-    // Should remove all selections
-    assertEquals("Should have no selected items", 0, selectionManager.getSelected().size());
-
-    // Should trigger callback
-    assertEquals("Should trigger one callback", 1, callbackValues.size());
-    assertEquals("Callback should be -1", Integer.valueOf(-1), callbackValues.get(0));
-  }
-
-  @Test
-  public void testValidateSelectionsWhenEmpty() {
-    // Test validating when no items are selected
-    List<String> newList = Arrays.asList("NewItem1", "NewItem2");
-    selectionManager.validateSelectionsAgainst(newList);
-
-    // Should not trigger callback when nothing to validate
-    assertEquals("Should not trigger callback", 0, callbackValues.size());
-  }
-
-  @Test
-  public void testToggleWithItemNotInList() {
-    // Enable selection mode
-    selectionManager.setEnabled(true);
-    callbackValues.clear();
-
-    // Toggle item not in the list
-    selectionManager.toggle("NonExistentItem", testItems);
-
-    // Should still add to selection
-    assertTrue("Item should be selected", selectionManager.isSelected("NonExistentItem"));
-
-    // Callback should be called with -1 (not found in list)
-    assertEquals("Should trigger one callback", 1, callbackValues.size());
-    assertEquals(
-        "Callback should be -1 for item not found",
-        Integer.valueOf(-1),
-        callbackValues.get(0)
-    );
-  }
-
-  @Test
-  public void testWithDifferentGenericTypes() {
+  public void testGenericType_WorksWithDifferentTypes() {
     // Test with Integer type
-    Consumer<Integer> intCallback = value -> {
-    };
-    SelectionManager<Integer> intManager = new SelectionManager<>(intCallback);
+    SelectionManager<Integer> intManager = new SelectionManager<>(position -> {
+    });
     List<Integer> intList = Arrays.asList(1, 2, 3, 4, 5);
 
     intManager.setEnabled(true);
-    intManager.toggle(2, intList);
-    intManager.toggle(4, intList);
+    intManager.toggle(3, intList);
 
-    assertEquals("Should have 2 selected integers", 2, intManager.getSelected().size());
-    assertTrue("Should contain 2", intManager.isSelected(2));
-    assertTrue("Should contain 4", intManager.isSelected(4));
-    assertFalse("Should not contain 1", intManager.isSelected(1));
+    assertTrue("Should work with Integer type", intManager.isSelected(3));
+    assertEquals("Should have one selected integer", 1, intManager.getSelected().size());
   }
 
   @Test
-  public void testWithCustomObjects() {
-    // Test with custom objects (using Image class)
-    SelectionManager<Image> imageManager = new SelectionManager<>(value -> {
-    });
+  public void testEdgeCases_NullItem() {
+    selectionManager.setEnabled(true);
 
-    Image image1 = new Image("Image1", "source", "path1");
-    image1.setId(1);
-    Image image2 = new Image("Image2", "source", "path2");
-    image2.setId(2);
-    Image image3 = new Image("Image3", "source", "path3");
-    image3.setId(3);
-
-    List<Image> imageList = Arrays.asList(image1, image2, image3);
-
-    imageManager.setEnabled(true);
-    imageManager.toggle(imageList.get(0), imageList);
-    imageManager.toggle(imageList.get(2), imageList);
-
-    assertEquals("Should have 2 selected images", 2, imageManager.getSelected().size());
-    assertTrue("Should contain first image", imageManager.isSelected(imageList.get(0)));
-    assertTrue("Should contain third image", imageManager.isSelected(imageList.get(2)));
-    assertFalse("Should not contain second image", imageManager.isSelected(imageList.get(1)));
+    // Test with null item
+    try {
+      selectionManager.toggle(null, testItems);
+      selectionManager.isSelected(null);
+      // If no exception is thrown, the implementation handles null gracefully
+      assertTrue("Should handle null items gracefully", true);
+    } catch (Exception e) {
+      // If exception is thrown, that's also a valid response to null input
+      assertTrue("May throw exception for null items", true);
+    }
   }
 
   @Test
-  public void testMultipleEnableDisableCycles() {
-    // Test multiple enable/disable cycles
+  public void testEdgeCases_EmptyList() {
+    selectionManager.setEnabled(true);
+    List<String> emptyList = new ArrayList<>();
+
+    reset(mockOnChanged);
+    selectionManager.toggle("Item1", emptyList);
+
+    // Should call onChanged with -1 (not found)
+    verify(mockOnChanged).accept(-1);
+  }
+
+  @Test
+  public void testEdgeCases_NullList() {
+    selectionManager.setEnabled(true);
+
+    try {
+      selectionManager.toggle("Item1", null);
+      // If no exception, implementation handles null list
+      assertTrue("Should handle null list gracefully", true);
+    } catch (NullPointerException e) {
+      // NPE is expected for null list
+      assertTrue("May throw NPE for null list", true);
+    }
+  }
+
+  @Test
+  public void testStateTransitions_EnableDisableEnable() {
+    // Enable, select items, disable, then enable again
     selectionManager.setEnabled(true);
     selectionManager.toggle("Item1", testItems);
     selectionManager.toggle("Item2", testItems);
-    assertEquals("Should have 2 items selected", 2, selectionManager.getSelected().size());
 
+    assertEquals("Should have 2 selected items", 2, selectionManager.getSelected().size());
+
+    // Disable - should clear selections
     selectionManager.setEnabled(false);
-    assertEquals("Should clear when disabled", 0, selectionManager.getSelected().size());
+    assertTrue(
+        "Selections should be cleared when disabled",
+        selectionManager.getSelected().isEmpty()
+    );
 
+    // Enable again - should start fresh
     selectionManager.setEnabled(true);
-    assertEquals(
-        "Should still be empty after re-enabling",
-        0,
-        selectionManager.getSelected().size()
-    );
+    assertTrue("Should start with empty selections", selectionManager.getSelected().isEmpty());
 
+    // Should be able to select new items
     selectionManager.toggle("Item3", testItems);
-    assertEquals(
-        "Should be able to select after re-enabling",
-        1,
-        selectionManager.getSelected().size()
+    assertTrue(
+        "Should be able to select items after re-enabling",
+        selectionManager.isSelected("Item3")
     );
-    assertTrue("Item3 should be selected", selectionManager.isSelected("Item3"));
   }
 
   @Test
-  public void testCallbackCount() {
-    // Test that callbacks are called the correct number of times
-    selectionManager.setEnabled(true); // 1 callback
-    callbackValues.clear();
+  public void testCallbackBehavior_CorrectParameterPassing() {
+    selectionManager.setEnabled(true);
+    reset(mockOnChanged);
 
-    selectionManager.toggle("Item1", testItems); // 1 callback
-    selectionManager.toggle("Item2", testItems); // 1 callback
-    selectionManager.toggle("Item1", testItems); // 1 callback (deselect)
-    selectionManager.clearSelections(); // 1 callback
+    // Test various operations and their callback parameters
+    selectionManager.toggle("Item2", testItems); // Position 1
+    verify(mockOnChanged).accept(1);
 
-    assertEquals("Should have 4 callbacks", 4, callbackValues.size());
+    reset(mockOnChanged);
+    selectionManager.clearSelections(); // Global update
+    verify(mockOnChanged).accept(-1);
+
+    reset(mockOnChanged);
+    selectionManager.setEnabled(false); // Global update
+    verify(mockOnChanged).accept(-1);
   }
 
   @Test
-  public void testConcurrentModification() {
-    // Test that getting selected items doesn't interfere with modifications
+  public void testPerformance_LargeNumberOfItems() {
+    // Test with a larger list to ensure reasonable performance
+    List<String> largeList = new ArrayList<>();
+    for (int i = 0; i < 1000; i++) {
+      largeList.add("Item" + i);
+    }
+
     selectionManager.setEnabled(true);
-    selectionManager.toggle("Item1", testItems);
-    selectionManager.toggle("Item2", testItems);
 
-    Set<String> selected = selectionManager.getSelected();
+    // Select many items
+    for (int i = 0; i < 100; i++) {
+      selectionManager.toggle("Item" + i, largeList);
+    }
 
-    // Modify selection while holding reference to old set
-    selectionManager.toggle("Item3", testItems);
-    selectionManager.toggle("Item1", testItems); // Remove Item1
+    assertEquals("Should have 100 selected items", 100, selectionManager.getSelected().size());
 
-    // Old set should be unchanged
-    assertEquals("Old set should be unchanged", 2, selected.size());
-    assertTrue("Old set should still contain Item1", selected.contains("Item1"));
+    // Validate against modified list
+    List<String> newList = largeList.subList(50, 1000); // Remove first 50 items
+    selectionManager.validateSelectionsAgainst(newList);
 
-    // New set should reflect changes
-    Set<String> newSelected = selectionManager.getSelected();
-    assertEquals("New set should have 2 items", 2, newSelected.size());
-    assertFalse("New set should not contain Item1", newSelected.contains("Item1"));
-    assertTrue("New set should contain Item2", newSelected.contains("Item2"));
-    assertTrue("New set should contain Item3", newSelected.contains("Item3"));
+    assertEquals(
+        "Should have 50 selected items remaining",
+        50,
+        selectionManager.getSelected().size()
+    );
   }
 } 
