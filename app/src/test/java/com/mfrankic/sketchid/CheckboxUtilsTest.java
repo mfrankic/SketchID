@@ -17,6 +17,8 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
+import java.lang.reflect.Constructor;
+
 /**
  * Unit tests for the CheckboxUtils utility class
  */
@@ -37,8 +39,7 @@ public class CheckboxUtilsTest {
   public void testConstructorThrowsException() {
     // Test that the utility class constructor throws IllegalStateException
     try {
-      java.lang.reflect.Constructor<CheckboxUtils> constructor
-          = CheckboxUtils.class.getDeclaredConstructor();
+      Constructor<CheckboxUtils> constructor = CheckboxUtils.class.getDeclaredConstructor();
       constructor.setAccessible(true);
       constructor.newInstance();
       fail("Expected IllegalStateException to be thrown");
