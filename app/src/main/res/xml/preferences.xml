@@ -1,110 +1,99 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
+<androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <com.mfrankic.sketchid.CustomDialogPreference
         android:dialogTitle="Reset User Progress"
         android:icon="@android:drawable/ic_menu_revert"
         android:key="@string/key_reset_user_progress"
         android:summary="Some settings are disabled because some users haven't finished their drawing sessions"
-        android:title="Reset User Progress" />
+        android:title="Reset User Progress"
+        app:isPreferenceVisible="false" />
 
     <PreferenceCategory
-        android:key="@string/key_user_settings"
-        android:title="User Settings">
-
-        <ListPreference
-            android:dialogTitle="Choose a user"
-            android:icon="@android:drawable/ic_menu_more"
-            android:key="@string/key_selected_user"
-            android:summary="Select user from the list"
-            android:title="Select User" />
+        app:key="@string/key_user_settings"
+        app:title="User Settings">
 
         <EditTextPreference
             android:dialogTitle="Enter New User Name"
             android:icon="@android:drawable/ic_menu_add"
-            android:key="@string/key_new_user"
-            android:summary="Enter a name to create a new user"
-            android:title="Create New User" />
+            android:title="Add New User"
+            app:key="@string/key_new_user"
+            app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
+            android:dialogTitle="Choose a user"
+            android:icon="@android:drawable/ic_menu_more"
+            android:summary="Select user from the list"
+            android:title="Select User"
+            app:key="@string/key_selected_user" />
 
         <com.mfrankic.sketchid.CustomDialogPreference
             android:dialogTitle="Delete User"
             android:icon="@android:drawable/ic_menu_delete"
-            android:key="@string/key_delete_user"
-            android:summary="Delete current user"
-            android:title="Delete User" />
-
-        <Preference
-            android:icon="@android:drawable/ic_menu_set_as"
-            android:key="@string/key_export_data"
-            android:summary="Export user data to CSV file"
-            android:title="Export Data" />
-
-        <Preference
-            android:icon="@android:drawable/ic_menu_upload"
-            android:key="@string/key_upload_data"
-            android:summary="Upload user data to Firebase"
-            android:title="Upload Data" />
-
-        <com.mfrankic.sketchid.CustomDialogPreference
-            android:dialogTitle="Delete User Drawing Data"
-            android:icon="@android:drawable/ic_menu_delete"
-            android:key="@string/key_delete_user_data"
-            android:summary="Delete all user drawing data from the database"
-            android:title="Delete User Drawing Data" />
+            android:summary="Permanently remove the selected user and their data"
+            android:title="Delete Current User"
+            app:enabled="false"
+            app:key="@string/key_delete_user" />
 
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:key="@string/key_drawing_settings"
-        android:title="Drawing Settings">
-
-        <EditTextPreference
-            android:dialogTitle="Enter Number of Drawing Attempts"
-            android:icon="@android:drawable/ic_menu_day"
-            android:key="@string/key_drawing_attempts"
-            android:summary="Enter a number of drawing attempts"
-            android:title="Number of Drawing Attempts" />
+        app:key="@string/key_drawing_settings"
+        app:title="Drawing Settings">
 
         <ListPreference
-            android:defaultValue="normal"
             android:dialogTitle="Choose Drawing Mode"
             android:entries="@array/drawing_mode_entries"
             android:entryValues="@array/drawing_mode_values"
             android:icon="@android:drawable/ic_menu_view"
-            android:key="@string/key_drawing_mode"
             android:summary="Select drawing display mode"
-            android:title="Drawing Mode" />
+            android:title="Drawing Mode"
+            app:defaultValue="normal"
+            app:key="@string/key_drawing_mode"
+            app:useSimpleSummaryProvider="false" />
+
+        <EditTextPreference
+            android:dialogTitle="Set Attempts"
+            android:icon="@android:drawable/ic_menu_day"
+            android:summary="Enter a number of drawing attempts"
+            android:title="Drawing Attempts per Image"
+            app:defaultValue="3"
+            app:key="@string/key_drawing_attempts" />
 
         <Preference
             android:icon="@android:drawable/ic_menu_gallery"
-            android:key="@string/key_select_images"
-            android:summary="Choose images for drawing"
-            android:title="Select Drawing Images" />
+            android:summary="Choose which images to use for drawing tasks"
+            android:title="Select Reference Images"
+            app:key="@string/key_select_images" />
 
     </PreferenceCategory>
 
     <PreferenceCategory
-        android:key="@string/key_data_management"
-        android:title="Data Management">
+        app:key="@string/key_data_management"
+        app:title="Data Management">
 
         <Preference
-            android:icon="@android:drawable/ic_menu_set_as"
-            android:key="@string/key_export_all_data"
-            android:summary="Export all users' data to CSV files"
-            android:title="Export All Data" />
+            android:icon="@android:drawable/ic_menu_save"
+            android:summary="Export drawing data for the selected user to local storage"
+            android:title="Export User Data"
+            app:enabled="false"
+            app:key="@string/key_export_data" />
 
-        <Preference
-            android:icon="@android:drawable/ic_menu_upload"
-            android:key="@string/key_upload_all_data"
-            android:summary="Upload all users' data to Firebase"
-            android:title="Upload All Data" />
+        <com.mfrankic.sketchid.CustomDialogPreference
+            android:dialogTitle="Delete User Drawing Data"
+            android:icon="@android:drawable/ic_menu_delete"
+            android:summary="Remove all drawing data for the selected user but keep the user profile"
+            android:title="Delete Current User's Data"
+            app:enabled="false"
+            app:key="@string/key_delete_user_data" />
 
         <com.mfrankic.sketchid.CustomDialogPreference
             android:dialogTitle="Clear All Drawing Data"
             android:icon="@android:drawable/ic_menu_delete"
-            android:key="@string/key_clear_data"
-            android:summary="Delete all drawing data from the database"
-            android:title="Clear Drawing Data" />
+            android:summary="Permanently remove all drawing data for all users"
+            android:title="Clear All Drawing Data"
+            app:key="@string/key_clear_data" />
 
     </PreferenceCategory>
 
