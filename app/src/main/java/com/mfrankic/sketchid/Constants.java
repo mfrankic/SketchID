@@ -89,7 +89,7 @@ public final class Constants {
   public static final String DRAWING_KEY_ANDROID_VERSION = "android_version";
   public static final String DRAWING_KEY_MODE = "drawing_mode";
 
-  public static final String FORMAT_PROGRESS_TEXT = "Attempt: %d/%d\tOverall: %d/%d";
+  public static final String FORMAT_PROGRESS_TEXT = "Attempt: %d/%d Overall: %d/%d";
 
   public static final String PREF_IMAGE_ORDER = "image_order";
   public static final String PREF_SELECTED_IMAGES = "selected_images";

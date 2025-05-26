@@ -38,7 +38,6 @@
     <string name="delete">Delete</string>
     <string name="cancel">Cancel</string>
     <string name="save">Save</string>
-    <string name="enter_new_name">Enter new name</string>
     <string name="done">Done</string>
 
     <!-- Content descriptions -->
@@ -47,7 +46,6 @@
     <string name="unselect_image">Unselect image</string>
     <string name="drag_to_reorder">Drag to reorder</string>
     <string name="selected_count_format">(%d)</string>
-    <string name="error_invalid_resource">Invalid image resource</string>
     <string name="drag_started">Started dragging item</string>
 
     <!-- Baseline collection strings -->
@@ -57,10 +55,7 @@
     <string name="baseline_collection_failed">Baseline collection failed, but you can still draw</string>
 
     <!-- Export progress strings -->
-    <string name="export_in_progress">Exporting data, please wait...</string>
-    <string name="export_complete">Data exported successfully!</string>
+    <string name="export_in_progress">Exporting data, please wait…</string>
     <string name="export_failed">Data export failed. Please check storage permissions and try again.</string>
-    <string name="export_no_data">No data to export</string>
     <string name="export_success_location">Data exported successfully to Downloads/SketchIDData</string>
-    <string name="export_all_failed_summary">Export for some users/data failed. Check logs for details.</string>
 </resources>

@@ -58,6 +58,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   private static final String DIALOG_RESULT_KEY = "dialog_result";
   private static final String UNKNOWN_VALUE = "unknown";
   private static final String UNKNOWN_IMAGE = "unknown_image";
+  private static final String PROGRESS_ITEM_SUFFIX = " data";
 
   private EditTextPreference newUserPreference;
   private EditTextPreference drawingAttemptsPreference;
@@ -438,7 +439,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       exportDataPreference.setOnPreferenceClickListener(preference -> {
         SettingsActivity activity = (SettingsActivity) getActivity();
         if (activity != null) {
-          activity.showExportOverlay(false);
+          activity.showExportOverlay();
           activity.clearProgressItems();
         }
 
@@ -468,42 +469,23 @@ public class SettingsFragment extends PreferenceFragmentCompat {
    * UI updates are handled via the activity.
    */
   private boolean exportDataToCSV(@Nullable SettingsActivity activity) {
-    if (!isValidUserForExport()) {
-      if (activity != null) activity.showOkButton();
-      return false;
-    }
-
-    File exportDir = createExportDirectory();
-    if (exportDir == null) {
-      if (activity != null) activity.showOkButton();
-      return false;
-    }
-
     long userId = Long.parseLong(selectedUserID);
-    ContentResolver contentResolver = requireActivity().getContentResolver();
-    String timestamp = createTimestamp();
+    String userName = getUserNameForExport(userId);
 
-    CharSequence userNameCharSequence = userListPreference.getEntry();
-    String userName = (userNameCharSequence != null)
-                      ? userNameCharSequence.toString()
-                      : "User_" + userId;
-    String userDirName = userName + "_" + timestamp;
-    File userDir = new File(exportDir, userDirName);
-
-    if (!userDir.exists() && !userDir.mkdirs()) {
-      showExportMessage("Failed to create user directory: " + userDirName);
-      if (activity != null) activity.showOkButton();
-      return false;
+    File userDir = prepareUserExportDirectory(activity, userName);
+    if (userDir == null) {
+      return false; // Message already shown by prepareUserExportDirectory or isValidUserForExport
     }
-
-    Executor parallelExecutor = Executors.newFixedThreadPool(6);
-    CountDownLatch dataTypeLatch = new CountDownLatch(6);
-    ConcurrentHashMap<String, Boolean> exportResults = new ConcurrentHashMap<>();
-    final int TOTAL_DATA_TYPES = 6;
 
     final String[] dataTypes = {
         "Drawing", "Gravity", "Gyroscope", "Magnetic Field", "Magnetic Baseline", "Accelerometer"
     };
+
+    ContentResolver contentResolver = requireActivity().getContentResolver();
+    Executor parallelExecutor = Executors.newFixedThreadPool(dataTypes.length);
+    CountDownLatch dataTypeLatch = new CountDownLatch(dataTypes.length);
+    ConcurrentHashMap<String, Boolean> exportResults = new ConcurrentHashMap<>();
+
     final String[] dataPrefixes = {
         Constants.DRAWING_DATA_PREFIX,
         Constants.GRAVITY_DATA_PREFIX,
@@ -515,135 +497,48 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
     if (activity != null) {
       for (String dataType : dataTypes) {
-        activity.addProgressItem(dataType + " data");
+        activity.addProgressItem(dataType + PROGRESS_ITEM_SUFFIX);
       }
     }
 
     BiConsumer<String, Boolean> progressUpdater = (dataType, success) -> {
       if (activity != null) {
-        activity.updateProgressItemStatus(dataType + " data", success);
+        activity.updateProgressItemStatus(dataType + PROGRESS_ITEM_SUFFIX, success);
       }
     };
 
-    parallelExecutor.execute(() -> {
-      boolean success = false;
-      String dataType = dataTypes[0];
-      try {
-        List<DrawingExportData> data = db
-            .drawingDataDao()
-            .getAllDrawingDataWithUsersAndImagesByUserID(userId);
-        processDrawingModes(data);
-        Map<String, List<DrawingExportData>> dataByMode = groupDataByDrawingMode(data);
-        success = exportDataByModeAndImage(dataByMode, userDir, contentResolver);
-        exportResults.put(dataType, success);
-      } catch (Exception e) {
-        exportResults.put(dataType, false);
-        success = false;
-      } finally {
-        dataTypeLatch.countDown();
-        progressUpdater.accept(dataType, success);
-      }
-    });
+    ExportTaskContext exportContext = new ExportTaskContext(
+        userId,
+                                                            userDir,
+                                                            contentResolver,
+                                                            dataTypeLatch,
+                                                            exportResults,
+                                                            progressUpdater
+    );
 
-    for (int i = 1; i < TOTAL_DATA_TYPES; i++) {
+    // Launch Drawing Data Export
+    parallelExecutor.execute(() -> launchDrawingDataExport(exportContext, dataTypes[0]));
+
+    // Launch Sensor Data Exports
+    for (int i = 1; i < dataTypes.length; i++) {
       final int index = i;
-      parallelExecutor.execute(() -> {
-        boolean success = false;
-        String dataType = dataTypes[index];
-        try {
-          switch (index) {
-            case 1:
-              List<GravityExportData> gravityData = db
-                  .gravityDataDao()
-                  .getGravityDataWithUsersAndImagesByUserId(userId);
-              processGravityDrawingModes(gravityData);
-              Map<String, List<GravityExportData>> gravityDataByMode
-                  = groupGravityDataByDrawingMode(gravityData);
-              success = exportSensorDataByModeAndImage(
-                  gravityDataByMode,
-                  userDir,
-                  contentResolver,
-                  dataPrefixes[index],
-                  this::writeGravityDataToStream
-              );
-              break;
-            case 2:
-              List<GyroscopeExportData> gyroscopeData = db
-                  .gyroscopeDataDao()
-                  .getGyroscopeDataWithUsersAndImagesByUserId(userId);
-              processGyroscopeDrawingModes(gyroscopeData);
-              Map<String, List<GyroscopeExportData>> gyroscopeDataByMode
-                  = groupGyroscopeDataByDrawingMode(gyroscopeData);
-              success = exportSensorDataByModeAndImage(
-                  gyroscopeDataByMode,
-                  userDir,
-                  contentResolver,
-                  dataPrefixes[index],
-                  this::writeGyroscopeDataToStream
-              );
-              break;
-            case 3:
-              List<MagneticFieldExportData> magneticFieldData = db
-                  .magneticFieldDataDao()
-                  .getMagneticFieldDataWithUsersAndImagesByUserId(userId);
-              processMagneticFieldDrawingModes(magneticFieldData);
-              Map<String, List<MagneticFieldExportData>> magneticFieldDataByMode
-                  = groupMagneticFieldDataByDrawingMode(magneticFieldData);
-              success = exportSensorDataByModeAndImage(
-                  magneticFieldDataByMode,
-                  userDir,
-                  contentResolver,
-                  dataPrefixes[index],
-                  this::writeMagneticFieldDataToStream
-              );
-              break;
-            case 4:
-              List<MagneticFieldBaselineExportData> magneticBaselineData = db
-                  .magneticFieldBaselineDataDao()
-                  .getBaselineDataWithUsersAndImagesByUserId(userId);
-              processMagneticFieldBaselineDrawingModes(magneticBaselineData);
-              Map<String, List<MagneticFieldBaselineExportData>> magneticBaselineDataByMode
-                  = groupMagneticFieldBaselineDataByDrawingMode(magneticBaselineData);
-              success = exportSensorDataByModeAndImage(
-                  magneticBaselineDataByMode,
-                  userDir,
-                  contentResolver,
-                  dataPrefixes[index],
-                  this::writeMagneticFieldBaselineDataToStream
-              );
-              break;
-            case 5:
-              List<AccelerometerExportData> accelerometerData = db
-                  .accelerometerDataDao()
-                  .getAccelerometerDataWithUsersAndImagesByUserId(userId);
-              processAccelerometerDrawingModes(accelerometerData);
-              Map<String, List<AccelerometerExportData>> accelerometerDataByMode
-                  = groupAccelerometerDataByDrawingMode(accelerometerData);
-              success = exportSensorDataByModeAndImage(
-                  accelerometerDataByMode,
-                  userDir,
-                  contentResolver,
-                  dataPrefixes[index],
-                  this::writeAccelerometerDataToStream
-              );
-              break;
-            default:
-              throw new IllegalArgumentException("Invalid data type index: " + index);
-          }
-          exportResults.put(dataType, success);
-        } catch (Exception e) {
-          exportResults.put(dataType, false);
-          success = false;
-        } finally {
-          dataTypeLatch.countDown();
-          progressUpdater.accept(dataType, success);
-        }
-      });
+      parallelExecutor.execute(() -> launchSensorDataExport(
+          exportContext,
+          dataTypes,
+          dataPrefixes,
+          index
+      ));
     }
 
     try {
       boolean completed = dataTypeLatch.await(180, TimeUnit.SECONDS);
       if (!completed) {
+        android.util.Log.w(
+            "ExportData",
+            "Timeout waiting for data types to export for user: " + userName
+        );
+        showExportMessage("Export timed out for user: " + userName);
+        // Potentially update specific UI elements if needed
       }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
@@ -662,6 +557,160 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     }
 
     return allDataTypesExported;
+  }
+
+  private String getUserNameForExport(long userId) {
+    CharSequence userNameCharSequence = userListPreference.getEntry();
+    return (userNameCharSequence != null) ? userNameCharSequence.toString() : "User_" + userId;
+  }
+
+  private File prepareUserExportDirectory(@Nullable SettingsActivity activity, String userName) {
+    if (!isValidUserForExport()) {
+      if (activity != null) activity.showOkButton();
+
+      showExportMessage("Cannot export: No valid user selected.");
+      return null;
+    }
+
+    File exportDir = createExportDirectory(); // Shows toast on failure
+    if (exportDir == null) {
+      if (activity != null) activity.showOkButton();
+      return null;
+    }
+
+    String timestamp = createTimestamp();
+    String userDirName = userName + "_" + timestamp;
+    File userDir = new File(exportDir, userDirName);
+
+    if (!userDir.exists() && !userDir.mkdirs()) {
+      showExportMessage("Failed to create user directory: " + userDirName);
+      if (activity != null) activity.showOkButton();
+      return null;
+    }
+    return userDir;
+  }
+
+  private void launchDrawingDataExport(ExportTaskContext context, String dataType) {
+    boolean success = false;
+    try {
+      List<DrawingExportData> data = db
+          .drawingDataDao()
+          .getAllDrawingDataWithUsersAndImagesByUserID(context.userId);
+      processDrawingModes(data);
+      Map<String, List<DrawingExportData>> dataByMode = groupDataByDrawingMode(data);
+      success = exportDataByModeAndImage(dataByMode, context.userDir, context.contentResolver);
+      context.exportResults.put(dataType, success);
+    } catch (Exception e) {
+      android.util.Log.e("ExportDrawingData", "Error exporting drawing data", e);
+      context.exportResults.put(dataType, false);
+      success = false;
+    } finally {
+      context.dataTypeLatch.countDown();
+      context.progressUpdater.accept(dataType, success);
+    }
+  }
+
+  private void launchSensorDataExport(
+      ExportTaskContext context,
+      String[] dataTypes,
+      String[] dataPrefixes,
+      int index
+  ) {
+    boolean success = false;
+    String dataType = dataTypes[index];
+    try {
+      switch (index) {
+        case 1: // Gravity
+          List<GravityExportData> gravityData = db
+              .gravityDataDao()
+              .getGravityDataWithUsersAndImagesByUserId(context.userId);
+          processGravityDrawingModes(gravityData);
+          Map<String, List<GravityExportData>> gravityDataByMode = groupGravityDataByDrawingMode(
+              gravityData);
+          success = exportSensorDataByModeAndImage(
+              gravityDataByMode,
+              context.userDir,
+              context.contentResolver,
+              dataPrefixes[index],
+              this::writeGravityDataToStream
+          );
+          break;
+        case 2: // Gyroscope
+          List<GyroscopeExportData> gyroscopeData = db
+              .gyroscopeDataDao()
+              .getGyroscopeDataWithUsersAndImagesByUserId(context.userId);
+          processGyroscopeDrawingModes(gyroscopeData);
+          Map<String, List<GyroscopeExportData>> gyroscopeDataByMode
+              = groupGyroscopeDataByDrawingMode(gyroscopeData);
+          success = exportSensorDataByModeAndImage(
+              gyroscopeDataByMode,
+              context.userDir,
+              context.contentResolver,
+              dataPrefixes[index],
+              this::writeGyroscopeDataToStream
+          );
+          break;
+        case 3: // Magnetic Field
+          List<MagneticFieldExportData> magneticFieldData = db
+              .magneticFieldDataDao()
+              .getMagneticFieldDataWithUsersAndImagesByUserId(context.userId);
+          processMagneticFieldDrawingModes(magneticFieldData);
+          Map<String, List<MagneticFieldExportData>> magneticFieldDataByMode
+              = groupMagneticFieldDataByDrawingMode(magneticFieldData);
+          success = exportSensorDataByModeAndImage(
+              magneticFieldDataByMode,
+              context.userDir,
+              context.contentResolver,
+              dataPrefixes[index],
+              this::writeMagneticFieldDataToStream
+          );
+          break;
+        case 4: // Magnetic Baseline
+          List<MagneticFieldBaselineExportData> magneticBaselineData = db
+              .magneticFieldBaselineDataDao()
+              .getBaselineDataWithUsersAndImagesByUserId(context.userId);
+          processMagneticFieldBaselineDrawingModes(magneticBaselineData);
+          Map<String, List<MagneticFieldBaselineExportData>> magneticBaselineDataByMode
+              = groupMagneticFieldBaselineDataByDrawingMode(magneticBaselineData);
+          success = exportSensorDataByModeAndImage(
+              magneticBaselineDataByMode,
+              context.userDir,
+              context.contentResolver,
+              dataPrefixes[index],
+              this::writeMagneticFieldBaselineDataToStream
+          );
+          break;
+        case 5: // Accelerometer
+          List<AccelerometerExportData> accelerometerData = db
+              .accelerometerDataDao()
+              .getAccelerometerDataWithUsersAndImagesByUserId(context.userId);
+          processAccelerometerDrawingModes(accelerometerData);
+          Map<String, List<AccelerometerExportData>> accelerometerDataByMode
+              = groupAccelerometerDataByDrawingMode(accelerometerData);
+          success = exportSensorDataByModeAndImage(
+              accelerometerDataByMode,
+              context.userDir,
+              context.contentResolver,
+              dataPrefixes[index],
+              this::writeAccelerometerDataToStream
+          );
+          break;
+        default:
+          throw new IllegalArgumentException("Invalid data type index: " + index);
+      }
+      context.exportResults.put(dataType, success);
+    } catch (Exception e) {
+      android.util.Log.e(
+          "ExportSensorData",
+          "Error exporting " + dataType + PROGRESS_ITEM_SUFFIX,
+          e
+      );
+      context.exportResults.put(dataType, false);
+      success = false;
+    } finally {
+      context.dataTypeLatch.countDown();
+      context.progressUpdater.accept(dataType, success);
+    }
   }
 
   private void showExportMessage(String message) {
@@ -1610,6 +1659,31 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   private interface SensorDataWriter<T> {
     void writeData(OutputStream outputStream, List<T> data)
     throws IOException;
+  }
+
+  private static class ExportTaskContext {
+    final long userId;
+    final File userDir;
+    final ContentResolver contentResolver;
+    final CountDownLatch dataTypeLatch;
+    final ConcurrentHashMap<String, Boolean> exportResults;
+    final BiConsumer<String, Boolean> progressUpdater;
+
+    ExportTaskContext(
+        long userId,
+        File userDir,
+        ContentResolver contentResolver,
+        CountDownLatch dataTypeLatch,
+        ConcurrentHashMap<String, Boolean> exportResults,
+        BiConsumer<String, Boolean> progressUpdater
+    ) {
+      this.userId = userId;
+      this.userDir = userDir;
+      this.contentResolver = contentResolver;
+      this.dataTypeLatch = dataTypeLatch;
+      this.exportResults = exportResults;
+      this.progressUpdater = progressUpdater;
+    }
   }
 
   private static class SessionInfo {

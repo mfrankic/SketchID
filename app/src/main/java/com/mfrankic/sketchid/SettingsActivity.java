@@ -229,20 +229,7 @@ public class SettingsActivity extends BaseActivity {
     });
   }
 
-  public void updateProgressItemContent(String taskName, String newContent) {
-    runOnUiThread(() -> {
-      View itemView = progressItemViews.get(taskName);
-      if (itemView instanceof LinearLayout) {
-        LinearLayout itemLayout = (LinearLayout) itemView;
-        if (itemLayout.getChildCount() > 1 && itemLayout.getChildAt(1) instanceof TextView) {
-          TextView taskTextView = (TextView) itemLayout.getChildAt(1);
-          taskTextView.setText(newContent);
-        }
-      }
-    });
-  }
-
-  public void showExportOverlay(boolean isExportAll) {
+  public void showExportOverlay() {
     if (exportOverlay != null && mainOverlayLayoutView != null && exportStatusText != null) {
       isExportInProgress = true;
       exportOverlay.setVisibility(View.VISIBLE);
