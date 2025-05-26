@@ -70,7 +70,6 @@ public class CheckboxUtils {
     GradientDrawable background = getGradientDrawable(context, backgroundColor, borderColor);
 
     if (state > 0) {
-
       try {
         int drawableRes = (state == 1) ? R.drawable.checkmark : R.drawable.indeterminate_minus;
 
@@ -88,11 +87,9 @@ public class CheckboxUtils {
 
         checkboxButton.setImageDrawable(layerDrawable);
       } catch (Exception e) {
-
         checkboxButton.setImageDrawable(background);
       }
     } else {
-
       checkboxButton.setImageDrawable(background);
     }
   }

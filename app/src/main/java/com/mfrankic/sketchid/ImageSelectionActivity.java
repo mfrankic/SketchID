@@ -191,10 +191,8 @@ public class ImageSelectionActivity extends BaseActivity {
     int selected = unselectedAdapter.getMultiSelectedImages().size();
 
     if (selected < total) {
-
       selectAllImages();
     } else {
-
       deselectAllImages();
     }
   }

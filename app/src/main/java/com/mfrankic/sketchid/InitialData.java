@@ -14,7 +14,7 @@ public class InitialData {
   public static List<Image> getImages() {
     List<Image> images = new ArrayList<>();
     images.add(new Image("Arrow", SOURCE_DEFAULT, String.valueOf(R.drawable.arrow)));
-    images.add(new Image("Checkmark", SOURCE_DEFAULT, String.valueOf(R.drawable.checkmark)));
+    images.add(new Image("Checkmark", SOURCE_DEFAULT, String.valueOf(R.drawable.check)));
     images.add(new Image("Crown", SOURCE_DEFAULT, String.valueOf(R.drawable.crown)));
     images.add(new Image("Envelope", SOURCE_DEFAULT, String.valueOf(R.drawable.envelope)));
     images.add(new Image("Heart", SOURCE_DEFAULT, String.valueOf(R.drawable.heart)));
