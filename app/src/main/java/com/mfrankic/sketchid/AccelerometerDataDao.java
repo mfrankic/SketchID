@@ -7,12 +7,30 @@ import androidx.room.RoomWarnings;
 
 import java.util.List;
 
+/**
+ * Data Access Object (DAO) for {@link AccelerometerData} entities.
+ * Provides methods to interact with the accelerometer_data table in the database.
+ */
 @Dao
 public interface AccelerometerDataDao {
 
+  /**
+   * Inserts a list of accelerometer data records into the database.
+   *
+   * @param accelerometerDataList A list of {@link AccelerometerData} to insert.
+   */
   @Insert
   void insertAll(List<AccelerometerData> accelerometerDataList);
 
+  /**
+   * Retrieves a list of {@link AccelerometerExportData} for a specific user,
+   * including associated user and image names.
+   * The query joins accelerometer_data with user and image tables to provide comprehensive
+   * export data.
+   *
+   * @param userId The ID of the user for whom to retrieve accelerometer data.
+   * @return A list of {@link AccelerometerExportData} objects.
+   */
   @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
   @Query(
       "SELECT\n"

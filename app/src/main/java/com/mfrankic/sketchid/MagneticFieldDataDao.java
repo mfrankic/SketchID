@@ -7,12 +7,30 @@ import androidx.room.RoomWarnings;
 
 import java.util.List;
 
+/**
+ * Data Access Object (DAO) for {@link MagneticFieldData} entities.
+ * Provides methods to interact with the magnetic_field_data table in the database.
+ */
 @Dao
 public interface MagneticFieldDataDao {
 
+  /**
+   * Inserts a list of magnetic field data records into the database.
+   *
+   * @param magneticFieldDataList A list of {@link MagneticFieldData} to insert.
+   */
   @Insert
   void insertAll(List<MagneticFieldData> magneticFieldDataList);
 
+  /**
+   * Retrieves a list of {@link MagneticFieldExportData} for a specific user,
+   * including associated user and image names.
+   * The query joins magnetic_field_data with user and image tables to provide comprehensive
+   * export data.
+   *
+   * @param userId The ID of the user for whom to retrieve magnetic field data.
+   * @return A list of {@link MagneticFieldExportData} objects.
+   */
   @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
   @Query(
       "SELECT\n"

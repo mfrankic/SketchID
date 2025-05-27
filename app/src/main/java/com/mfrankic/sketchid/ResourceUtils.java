@@ -9,8 +9,14 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Utility class to handle resource mapping without using resource reflection (getIdentifier).
- * This class creates a direct mapping between image names and their resource IDs.
+ * Utility class for managing and accessing drawable resources.
+ * This class provides a way to get drawable resource IDs by their names without using
+ * reflection ({@code getIdentifier}), which can be less performant.
+ * It pre-populates a map of known drawable names to their resource IDs upon initialization.
+ * <p>
+ * Call {@link #initialize()} once during application startup (e.g., in
+ * {@link SketchIDApplication#onCreate()})
+ * to prepare the resource mappings.
  */
 public class ResourceUtils {
   private static final String TAG = "ResourceUtils";
@@ -25,7 +31,9 @@ public class ResourceUtils {
   }
 
   /**
-   * Initialize the resource mappings. Should be called once during app startup.
+   * Initializes the drawable resource mappings.
+   * This method should be called once during application startup to populate the internal map
+   * of drawable names to resource IDs. If already initialized, this method does nothing.
    */
   public static void initialize() {
     if (initialized) return;
@@ -35,6 +43,10 @@ public class ResourceUtils {
     initialized = true;
   }
 
+  /**
+   * Populates the {@code drawableResourceMap} with mappings from drawable names (lowercase)
+   * to their corresponding {@code R.drawable} resource IDs.
+   */
   private static void initializeDrawableMap() {
 
     drawableResourceMap.put("arrow", R.drawable.arrow);
@@ -51,10 +63,12 @@ public class ResourceUtils {
   }
 
   /**
-   * Get drawable resource ID for a given image name
+   * Retrieves the drawable resource ID for a given image name.
+   * The image name is case-insensitive.
    *
-   * @param imageName Name of the image
-   * @return Resource ID or 0 if not found
+   * @param imageName The name of the image (e.g., "arrow", "Heart").
+   * @return The resource ID (e.g., {@code R.drawable.arrow}) if found, or 0 if the name is null,
+   * empty, not found, or if {@link #initialize()} has not been called.
    */
   @DrawableRes
   public static int getDrawableResourceByName(String imageName) {
@@ -67,6 +81,7 @@ public class ResourceUtils {
       return 0;
     }
 
+    // Normalize the name to lowercase to match the map keys
     String normalizedName = imageName.toLowerCase(Locale.ROOT);
     Integer resourceId = drawableResourceMap.get(normalizedName);
 

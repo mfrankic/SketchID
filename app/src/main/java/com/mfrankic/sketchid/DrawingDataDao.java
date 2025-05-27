@@ -6,12 +6,29 @@ import androidx.room.Query;
 
 import java.util.List;
 
+/**
+ * Data Access Object (DAO) for {@link DrawingData} entities.
+ * Provides methods to interact with the drawing_data table in the database.
+ */
 @Dao
 public interface DrawingDataDao {
 
+  /**
+   * Inserts a list of drawing data records into the database.
+   *
+   * @param drawingDataList A list of {@link DrawingData} to insert.
+   */
   @Insert
   void insertAll(List<DrawingData> drawingDataList);
 
+  /**
+   * Retrieves a list of {@link DrawingExportData} for a specific user,
+   * including associated user and image names.
+   * The query joins drawing_data with user and image tables to provide comprehensive export data.
+   *
+   * @param userID The ID of the user for whom to retrieve drawing data.
+   * @return A list of {@link DrawingExportData} objects.
+   */
   @Query(
       "SELECT\n"
       + "d.id, d.time, d.x, d.y, d.`action`, d.attempt, d.item_type AS itemType,\n"
@@ -25,12 +42,28 @@ public interface DrawingDataDao {
   )
   List<DrawingExportData> getAllDrawingDataWithUsersAndImagesByUserID(long userID);
 
+  /**
+   * Deletes all drawing data from the database.
+   * Use with caution as this will remove all drawing records.
+   */
   @Query("DELETE FROM drawing_data")
   void deleteAllDrawingData();
 
+  /**
+   * Deletes all drawing data for a specific user.
+   *
+   * @param userID The ID of the user whose drawing data is to be deleted.
+   * @return The number of rows affected.
+   */
   @Query("DELETE FROM drawing_data WHERE user_id = :userID")
   int deleteDrawingDataByUserID(long userID);
 
+  /**
+   * Deletes all drawing data for a specific user and session.
+   *
+   * @param userID    The ID of the user.
+   * @param sessionId The ID of the session.
+   */
   @Query("DELETE FROM drawing_data WHERE user_id = :userID AND session_id = :sessionId")
   void deleteUserSessionData(long userID, String sessionId);
 

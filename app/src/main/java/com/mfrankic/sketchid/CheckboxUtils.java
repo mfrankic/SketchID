@@ -12,23 +12,32 @@ import androidx.annotation.NonNull;
 import androidx.core.content.res.ResourcesCompat;
 
 /**
- * Utility class to help with checkbox styling in different contexts
+ * Utility class for creating and applying custom styles to checkbox-like {@link ImageButton} views.
+ * This class provides methods to render checkboxes with different states (checked, unchecked,
+ * indeterminate)
+ * and customizable colors for background, border, and checkmark.
+ * This class is not meant to be instantiated.
  */
 public class CheckboxUtils {
 
+  /**
+   * Private constructor to prevent instantiation of this utility class.
+   */
   private CheckboxUtils() {
     throw new IllegalStateException("Utility class");
   }
 
   /**
-   * Applies a custom styled checkbox to an ImageButton
+   * Applies a custom style to an {@link ImageButton} to make it look like a checkbox.
    *
-   * @param context         The application context
-   * @param checkboxButton  The ImageButton to style as a checkbox
-   * @param isChecked       Whether the checkbox is checked (true = checked, false = unchecked)
-   * @param backgroundColor The background color (can include alpha for transparency)
-   * @param borderColor     The color for the checkbox border
-   * @param checkmarkColor  The color for the checkmark
+   * @param context         The application context.
+   * @param checkboxButton  The {@link ImageButton} to be styled.
+   * @param isChecked       {@code true} if the checkbox should be displayed as checked, {@code
+   *                        false} otherwise.
+   * @param backgroundColor The background color of the checkbox (can include alpha for
+   *                        transparency).
+   * @param borderColor     The color of the checkbox border.
+   * @param checkmarkColor  The color of the checkmark icon.
    */
   public static void styleCustomCheckbox(
       Context context,
@@ -39,29 +48,31 @@ public class CheckboxUtils {
       int checkmarkColor
   ) {
     styleCustomCheckboxWithState(
-        context,
-        checkboxButton,
-        isChecked ? 1 : 0,
-        backgroundColor,
-        borderColor,
-        checkmarkColor
+        context, checkboxButton, isChecked ? 1 : 0, // 1 for checked, 0 for unchecked
+        backgroundColor, borderColor, checkmarkColor
     );
   }
 
   /**
-   * Applies a custom styled checkbox to an ImageButton with support for indeterminate state
+   * Applies a custom style to an {@link ImageButton} to make it look like a checkbox,
+   * with support for an indeterminate state.
    *
-   * @param context         The application context
-   * @param checkboxButton  The ImageButton to style as a checkbox
-   * @param state           The checkbox state: 0 = unchecked, 1 = checked, 2 = indeterminate
-   * @param backgroundColor The background color (can include alpha for transparency)
-   * @param borderColor     The color for the checkbox border
-   * @param checkmarkColor  The color for the checkmark
+   * @param context         The application context.
+   * @param checkboxButton  The {@link ImageButton} to be styled.
+   * @param state           The state of the checkbox:
+   *                        0 for unchecked,
+   *                        1 for checked,
+   *                        2 for indeterminate.
+   * @param backgroundColor The background color of the checkbox (can include alpha for
+   *                        transparency).
+   * @param borderColor     The color of the checkbox border.
+   * @param checkmarkColor  The color of the checkmark or indeterminate icon.
    */
   public static void styleCustomCheckboxWithState(
       Context context,
       ImageButton checkboxButton,
       int state,
+      // 0 = unchecked, 1 = checked, 2 = indeterminate
       int backgroundColor,
       int borderColor,
       int checkmarkColor
@@ -69,7 +80,7 @@ public class CheckboxUtils {
 
     GradientDrawable background = getGradientDrawable(context, backgroundColor, borderColor);
 
-    if (state > 0) {
+    if (state > 0) { // Checked or indeterminate
       try {
         int drawableRes = (state == 1) ? R.drawable.checkmark : R.drawable.indeterminate_minus;
 
@@ -87,13 +98,23 @@ public class CheckboxUtils {
 
         checkboxButton.setImageDrawable(layerDrawable);
       } catch (Exception e) {
+        // Fallback to just background if checkmark loading fails
         checkboxButton.setImageDrawable(background);
       }
-    } else {
+    } else { // Unchecked
       checkboxButton.setImageDrawable(background);
     }
   }
 
+  /**
+   * Creates a {@link GradientDrawable} to be used as the background for the custom checkbox.
+   *
+   * @param context         The application context.
+   * @param backgroundColor The background color.
+   * @param borderColor     The border color.
+   * @return A {@link GradientDrawable} with the specified background and border colors, and
+   * rounded corners.
+   */
   @NonNull
   private static GradientDrawable getGradientDrawable(
       Context context,
@@ -115,14 +136,15 @@ public class CheckboxUtils {
   }
 
   /**
-   * Creates a semi-transparent color with alpha value in 0-1 range
+   * Applies an alpha transparency value to a base color.
    *
-   * @param baseColor The base color to apply transparency to
-   * @param alpha     Alpha value between 0.0 (fully transparent) and 1.0 (fully opaque)
-   * @return Color with alpha applied
+   * @param baseColor The base color (e.g., {@code Color.RED}).
+   * @param alpha     The alpha value, ranging from 0.0 (fully transparent) to 1.0 (fully opaque).
+   *                  Values outside this range will be clamped.
+   * @return The new color integer with the alpha component applied.
    */
   public static int applyAlpha(int baseColor, float alpha) {
-
+    // Clamp alpha to the valid range [0, 1]
     alpha = Math.max(0f, Math.min(1f, alpha));
 
     int alphaInt = (int) (alpha * 255);

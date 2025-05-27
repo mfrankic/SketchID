@@ -7,12 +7,29 @@ import androidx.room.RoomWarnings;
 
 import java.util.List;
 
+/**
+ * Data Access Object (DAO) for {@link GyroscopeData} entities.
+ * Provides methods to interact with the gyroscope_data table in the database.
+ */
 @Dao
 public interface GyroscopeDataDao {
 
+  /**
+   * Inserts a list of gyroscope data records into the database.
+   *
+   * @param gyroscopeDataList A list of {@link GyroscopeData} to insert.
+   */
   @Insert
   void insertAll(List<GyroscopeData> gyroscopeDataList);
 
+  /**
+   * Retrieves a list of {@link GyroscopeExportData} for a specific user,
+   * including associated user and image names.
+   * The query joins gyroscope_data with user and image tables to provide comprehensive export data.
+   *
+   * @param userId The ID of the user for whom to retrieve gyroscope data.
+   * @return A list of {@link GyroscopeExportData} objects.
+   */
   @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
   @Query(
       "SELECT\n"

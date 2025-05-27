@@ -5,12 +5,25 @@ import static com.mfrankic.sketchid.Constants.SOURCE_DEFAULT;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Utility class for providing initial data for the application.
+ * This class is not meant to be instantiated.
+ */
 public class InitialData {
 
+  /**
+   * Private constructor to prevent instantiation of this utility class.
+   */
   private InitialData() {
     throw new IllegalStateException("Utility class");
   }
 
+  /**
+   * Returns a list of default {@link Image} objects to populate the database with.
+   * These images are sourced from drawable resources.
+   *
+   * @return A list of {@link Image} objects.
+   */
   public static List<Image> getImages() {
     List<Image> images = new ArrayList<>();
     images.add(new Image("Arrow", SOURCE_DEFAULT, String.valueOf(R.drawable.arrow)));

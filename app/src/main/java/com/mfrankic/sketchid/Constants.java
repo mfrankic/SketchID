@@ -1,5 +1,12 @@
 package com.mfrankic.sketchid;
 
+/**
+ * Defines application-wide constants.
+ * This class includes keys for SharedPreferences, database operations, UI elements (like dialog
+ * messages
+ * and button texts), data export formats, and other fixed values used throughout the application.
+ * This class is not meant to be instantiated.
+ */
 public final class Constants {
 
   public static final String KEY_CURRENT_ITEM_ATTEMPT = "current_item_attempt";
@@ -112,6 +119,9 @@ public final class Constants {
   public static final String EXPORT_DATE_FORMAT = "yyyyMMdd_HHmmss";
   public static final String FAILED_EXPORT_MESSAGE = "Failed to create export directory";
 
+  /**
+   * Private constructor to prevent instantiation of this utility class.
+   */
   private Constants() {
     throw new IllegalStateException("Utility class");
   }

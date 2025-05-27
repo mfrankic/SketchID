@@ -7,12 +7,29 @@ import androidx.room.RoomWarnings;
 
 import java.util.List;
 
+/**
+ * Data Access Object (DAO) for {@link GravityData} entities.
+ * Provides methods to interact with the gravity_data table in the database.
+ */
 @Dao
 public interface GravityDataDao {
 
+  /**
+   * Inserts a list of gravity data records into the database.
+   *
+   * @param gravityDataList A list of {@link GravityData} to insert.
+   */
   @Insert
   void insertAll(List<GravityData> gravityDataList);
 
+  /**
+   * Retrieves a list of {@link GravityExportData} for a specific user,
+   * including associated user and image names.
+   * The query joins gravity_data with user and image tables to provide comprehensive export data.
+   *
+   * @param userId The ID of the user for whom to retrieve gravity data.
+   * @return A list of {@link GravityExportData} objects.
+   */
   @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
   @Query(
       "SELECT\n"

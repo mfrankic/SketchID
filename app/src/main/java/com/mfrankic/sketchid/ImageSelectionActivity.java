@@ -8,6 +8,7 @@ import static com.mfrankic.sketchid.Constants.SOURCE_DEFAULT;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
@@ -51,7 +52,6 @@ import java.util.stream.Collectors;
 
 public class ImageSelectionActivity extends BaseActivity {
   private static final String PREF_NAME = PREF_IMAGE_ORDER;
-
   private final List<Image> allImages = new ArrayList<>();
   private List<Image> selectedImages = new ArrayList<>();
   private RecyclerView recyclerViewSelected;
@@ -66,7 +66,6 @@ public class ImageSelectionActivity extends BaseActivity {
       new ActivityResultContracts.GetMultipleContents(),
       this::handleMultipleImageSelection
   );
-
   private List<Image> initialSelectedImages = new ArrayList<>();
   private View btnAddImage;
   private boolean hasChanges = false;
@@ -78,38 +77,30 @@ public class ImageSelectionActivity extends BaseActivity {
   protected void onCreate(@Nullable Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_image_selection);
-
     if (getSupportActionBar() != null) {
       getSupportActionBar().setDisplayHomeAsUpEnabled(true);
       getSupportActionBar().setDisplayShowHomeEnabled(true);
       getSupportActionBar().setTitle("Select Images");
     }
-
     db = AppDatabase.getInstance(this);
     executor = Executors.newSingleThreadExecutor();
-
     setupBackPressHandler();
-
     multiSelectControls = findViewById(R.id.multiSelectControls);
     Button btnAddToSelection = findViewById(R.id.btnAddToSelection);
     Button btnRemoveSelected = findViewById(R.id.btnRemoveSelected);
     Button btnExitMultiSelect = findViewById(R.id.btnExitMultiSelect);
     checkboxSelectAll = findViewById(R.id.checkboxSelectAll);
-
     checkboxSelectAll.setOnClickListener(v -> handleSelectAllCheckboxClick());
     btnAddToSelection.setOnClickListener(v -> addSelectedImagesToSelection());
     btnRemoveSelected.setOnClickListener(v -> showRemoveConfirmationDialog());
     btnExitMultiSelect.setOnClickListener(v -> exitMultiSelectMode());
-
     RecyclerView recyclerViewUnselected = findViewById(R.id.recyclerViewUnselected);
     int spanCount = calculateSpanCount();
     GridLayoutManager layoutManager = new GridLayoutManager(this, spanCount);
     recyclerViewUnselected.setLayoutManager(layoutManager);
     recyclerViewUnselected.addItemDecoration(new StableGridSpacingDecoration(getResources().getDimensionPixelSize(
         R.dimen.grid_spacing) / 2));
-
     setupUnselectedAdapter();
-
     textViewSelected = findViewById(R.id.textViewSelected);
     textViewSelectedNumber = findViewById(R.id.textViewSelectedNumber);
     recyclerViewSelected = findViewById(R.id.recyclerViewSelected);
@@ -119,10 +110,8 @@ public class ImageSelectionActivity extends BaseActivity {
     selectedAdapter.setOnReorderListener(this::saveImageOrder);
     recyclerViewSelected.setAdapter(selectedAdapter);
     selectedAdapter.attachToRecyclerView(recyclerViewSelected);
-
     btnAddImage = findViewById(R.id.btnAddImage);
     btnAddImage.setOnClickListener(v -> openImagePicker());
-
     loadImages();
   }
 
@@ -139,10 +128,8 @@ public class ImageSelectionActivity extends BaseActivity {
             } else if (hasChanges) {
               showExitConfirmationDialog();
             } else {
-
               this.setEnabled(false);
               getOnBackPressedDispatcher().onBackPressed();
-
               this.setEnabled(true);
             }
           }
@@ -152,11 +139,9 @@ public class ImageSelectionActivity extends BaseActivity {
 
   private void updateSelectAllCheckboxState() {
     if (!isMultiSelectMode) return;
-
     int bgColor = Color.TRANSPARENT;
     int borderColor = getResources().getColor(R.color.primary, getTheme());
     int iconColor = getResources().getColor(R.color.primary, getTheme());
-
     int checkboxState = getCheckboxState();
     if (checkboxState > 0) {
       CheckboxUtils.styleCustomCheckboxWithState(
@@ -176,10 +161,8 @@ public class ImageSelectionActivity extends BaseActivity {
   private int getCheckboxState() {
     int total = unselectedAdapter.getItemCount();
     int selected = unselectedAdapter.getMultiSelectedImages().size();
-
     boolean isAllSelected = (selected > 0 && selected == total);
     boolean isIndeterminate = (selected > 0 && selected < total);
-
     int checkboxState = 0;
     if (isAllSelected) checkboxState = 1;
     else if (isIndeterminate) checkboxState = 2;
@@ -189,7 +172,6 @@ public class ImageSelectionActivity extends BaseActivity {
   private void handleSelectAllCheckboxClick() {
     int total = unselectedAdapter.getItemCount();
     int selected = unselectedAdapter.getMultiSelectedImages().size();
-
     if (selected < total) {
       selectAllImages();
     } else {
@@ -205,34 +187,24 @@ public class ImageSelectionActivity extends BaseActivity {
         unselectedList.add(image);
       }
     }
-
     for (Image image : unselectedList) {
       unselectedAdapter.toggleImageSelection(image);
     }
-
     updateSelectAllCheckboxState();
   }
 
   private void handleImageSelection(Image image) {
-
     processImageSelectionToggle(image);
-
     updateUnselectedImages();
-
     saveImageOrder();
-
     updateUIAfterImageSelection();
   }
 
   private void processImageSelectionToggle(Image image) {
-
     List<Image> currentlySelected = getCurrentlySelectedImages();
-
     boolean wasSelected = isImageAlreadySelected(image, currentlySelected);
     List<Image> newSelectedList = toggleImageInSelection(image, currentlySelected, wasSelected);
-
     selectedImages = newSelectedList;
-
     updateSelectionAdapter(newSelectedList);
   }
 
@@ -259,20 +231,16 @@ public class ImageSelectionActivity extends BaseActivity {
       boolean wasSelected
   ) {
     List<Image> newSelectedList = new ArrayList<>();
-
     if (wasSelected) {
-
       for (Image selected : currentlySelected) {
         if (selected.id != image.id) {
           newSelectedList.add(selected);
         }
       }
     } else {
-
       newSelectedList.addAll(currentlySelected);
       newSelectedList.add(image);
     }
-
     return newSelectedList;
   }
 
@@ -286,30 +254,24 @@ public class ImageSelectionActivity extends BaseActivity {
         }
       }
     }
-
     selectedAdapter.setImages(adapterImages);
   }
 
   private void updateUIAfterImageSelection() {
-
     textViewSelectedNumber.setText(String.format(
         Locale.getDefault(),
         getString(R.string.selected_count_format),
         selectedImages.size()
     ));
-
     updateSelectedSectionVisibility();
   }
 
   private void saveImageOrder() {
-
     List<Image> currentOrderedImages = selectedAdapter.getImages();
     if (!currentOrderedImages.isEmpty()) {
-
       selectedImages = new ArrayList<>();
       selectedImages.addAll(currentOrderedImages);
     }
-
     hasChanges = true;
   }
 
@@ -321,49 +283,34 @@ public class ImageSelectionActivity extends BaseActivity {
   }
 
   private void showImageOptionsDialog(Image image) {
-
     FrameLayout parentContainer = new FrameLayout(this);
     parentContainer.setLayoutParams(new FrameLayout.LayoutParams(
         ViewGroup.LayoutParams.MATCH_PARENT,
                                                                  ViewGroup.LayoutParams.WRAP_CONTENT
     ));
-
     View dialogView = LayoutInflater
         .from(this)
         .inflate(R.layout.dialog_image_options, parentContainer, false);
-
     DialogComponents components = setupDialogComponents(dialogView, image);
-
     loadImagePreview(image, components.imagePreview);
-
     AlertDialog dialog = createImageOptionsDialog(dialogView);
-
     setupDialogButtonListeners(dialog, image, components);
-
     dialog.show();
   }
 
   private DialogComponents setupDialogComponents(View dialogView, Image image) {
-
     ImageView imagePreview = dialogView.findViewById(R.id.image_preview);
     EditText editImageName = dialogView.findViewById(R.id.editImageName);
     Button btnDeleteImage = dialogView.findViewById(R.id.btnDeleteImage);
     Button btnCancel = dialogView.findViewById(R.id.btnCancel);
     Button btnSave = dialogView.findViewById(R.id.btnSave);
     TextInputLayout textInputLayout = (TextInputLayout) editImageName.getParent().getParent();
-
     editImageName.setText(image.name);
-
     validateImageName(image.name, textInputLayout);
-
     setupImageNameValidator(editImageName, textInputLayout);
-
     setupCheckerboardBackground(imagePreview);
-
     btnDeleteImage.setVisibility(image.source.equals(SOURCE_DEFAULT) ? View.GONE : View.VISIBLE);
-
     btnDeleteImage.setTextColor(getResources().getColor(R.color.error, getTheme()));
-
     return new DialogComponents(
         imagePreview,
                                 editImageName,
@@ -391,29 +338,27 @@ public class ImageSelectionActivity extends BaseActivity {
   private void setupImageNameValidator(EditText editImageName, TextInputLayout textInputLayout) {
     editImageName.addTextChangedListener(new TextWatcher() {
       @Override
-      public void beforeTextChanged(CharSequence s, int start, int count, int after) {
-        // No action needed before text change
-      }
+      public void beforeTextChanged(
+          CharSequence s,
+          int start,
+          int count,
+          int after
+      ) {        /* No action needed before text change */ }
 
       @Override
       public void onTextChanged(CharSequence s, int start, int before, int count) {
-
         String text = s.toString().trim();
         if (text.isEmpty()) {
-
           textInputLayout.setError(ERROR_NAME_EMPTY);
           textInputLayout.setErrorEnabled(true);
         } else {
-
           textInputLayout.setError(null);
           textInputLayout.setErrorEnabled(false);
         }
       }
 
       @Override
-      public void afterTextChanged(Editable s) {
-        // No action needed after text change
-      }
+      public void afterTextChanged(Editable s) {        /* No action needed after text change */ }
     });
   }
 
@@ -430,11 +375,8 @@ public class ImageSelectionActivity extends BaseActivity {
       Image image,
       DialogComponents components
   ) {
-
     components.btnCancel.setOnClickListener(v -> dialog.dismiss());
-
     components.btnSave.setOnClickListener(v -> handleSaveButtonClick(dialog, image, components));
-
     components.btnDeleteImage.setOnClickListener(v -> {
       dialog.dismiss();
       deleteImage(image);
@@ -444,14 +386,11 @@ public class ImageSelectionActivity extends BaseActivity {
   private void handleSaveButtonClick(AlertDialog dialog, Image image, DialogComponents components) {
     String newName = components.editImageName.getText().toString().trim();
     if (newName.isEmpty()) {
-
       components.textInputLayout.setError(ERROR_NAME_EMPTY);
       components.textInputLayout.setErrorEnabled(true);
       return;
     }
-
     if (!newName.equals(image.name)) {
-
       renameImage(image, newName);
     }
     dialog.dismiss();
@@ -460,26 +399,19 @@ public class ImageSelectionActivity extends BaseActivity {
   private void loadImages() {
     executor.execute(() -> {
       db.imageDao().deleteInvalidCustomImages();
-
       List<Image> fetchedImages = fetchAllImages();
       processLoadedImages(fetchedImages);
     });
   }
 
   private void loadDefaultImage(Image image, ImageView imagePreview) {
-
     int resourceId = ResourceUtils.getDrawableResourceByName(image.name);
-
     if (resourceId == 0 && !TextUtils.isEmpty(image.path)) {
       try {
         resourceId = Integer.parseInt(image.path);
-      } catch (NumberFormatException ignored) {
-        // Ignore invalid resource ID
-      }
+      } catch (NumberFormatException ignored) {        /* Ignore invalid resource ID */ }
     }
-
     if (resourceId != 0) {
-
       Glide.with(this).load(resourceId).fitCenter().into(imagePreview);
     } else {
       Toast.makeText(this, Constants.TOAST_FAILED_LOAD_DEFAULT, Toast.LENGTH_SHORT).show();
@@ -487,11 +419,9 @@ public class ImageSelectionActivity extends BaseActivity {
   }
 
   private void loadCustomImage(Image image, ImageView imagePreview) {
-
     Uri uri = Uri.parse(image.path);
     try {
       getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-
       Glide.with(this).load(uri).fitCenter().into(imagePreview);
     } catch (Exception e) {
       Toast
@@ -501,7 +431,6 @@ public class ImageSelectionActivity extends BaseActivity {
   }
 
   private List<Image> fetchAllImages() {
-
     List<Image> fetchedImages = new ArrayList<>();
     fetchedImages.addAll(db.imageDao().getImagesBySource(SOURCE_DEFAULT));
     fetchedImages.addAll(db.imageDao().getImagesBySource(SOURCE_CUSTOM));
@@ -509,14 +438,10 @@ public class ImageSelectionActivity extends BaseActivity {
   }
 
   private void processLoadedImages(List<Image> fetchedImages) {
-
     allImages.clear();
     allImages.addAll(fetchedImages);
-
     processSelectedImages();
-
     initialSelectedImages = new ArrayList<>(selectedImages);
-
     updateUIAfterLoading();
   }
 
@@ -530,7 +455,6 @@ public class ImageSelectionActivity extends BaseActivity {
   }
 
   private void processSelectedImages() {
-
     if (selectedImages.isEmpty()) {
       loadSelectionsFromPreferences();
     } else {
@@ -539,13 +463,10 @@ public class ImageSelectionActivity extends BaseActivity {
   }
 
   private void filterSelectedImagesAgainstDatabase() {
-
     List<Image> validSelectedImages = new ArrayList<>();
-
     for (Image selectedImage : selectedImages) {
       boolean imageStillExists = isImageInDatabase(selectedImage.id);
       if (imageStillExists) {
-
         for (Image image : allImages) {
           if (image.id == selectedImage.id) {
             validSelectedImages.add(image);
@@ -553,27 +474,21 @@ public class ImageSelectionActivity extends BaseActivity {
           }
         }
       } else {
-
         hasChanges = true;
       }
     }
-
     selectedImages.clear();
     selectedImages.addAll(validSelectedImages);
   }
 
   private void loadSelectionsFromPreferences() {
-
     Set<Integer> selectedImageIds = SelectedImagesManager.getSelectedImages(this);
-
     List<Integer> savedOrderIds = loadImageOrderFromPreferences();
-
     if (!savedOrderIds.isEmpty()) {
       loadImagesInSavedOrder(selectedImageIds, savedOrderIds);
     } else {
       loadImagesWithoutOrder(selectedImageIds);
     }
-
     initialSelectedImages = new ArrayList<>(selectedImages);
   }
 
@@ -597,9 +512,7 @@ public class ImageSelectionActivity extends BaseActivity {
   }
 
   private void loadImagesInSavedOrder(Set<Integer> selectedImageIds, List<Integer> savedOrderIds) {
-
     addImagesFromSavedOrder(selectedImageIds, savedOrderIds);
-
     addRemainingSelectedImages(selectedImageIds, savedOrderIds);
   }
 
@@ -613,7 +526,6 @@ public class ImageSelectionActivity extends BaseActivity {
   }
 
   private void loadImagesWithoutOrder(Set<Integer> selectedImageIds) {
-
     for (Image image : allImages) {
       if (selectedImageIds.contains(image.id)) {
         selectedImages.add(image);
@@ -627,15 +539,12 @@ public class ImageSelectionActivity extends BaseActivity {
       Toast.makeText(this, Constants.TOAST_NO_IMAGES_SELECTED, Toast.LENGTH_SHORT).show();
       return;
     }
-
     boolean hasDefaultImages = selectedForRemoval
         .stream()
         .anyMatch(image -> image.source.equals(SOURCE_DEFAULT));
-
     AlertDialog.Builder builder = new AlertDialog.Builder(this)
         .setTitle(Constants.DIALOG_TITLE_REMOVE_IMAGES)
         .setNegativeButton(Constants.CANCEL_BUTTON, null);
-
     if (hasDefaultImages) {
       builder
           .setMessage(Constants.DIALOG_MSG_DEFAULT_IMAGES)
@@ -648,7 +557,6 @@ public class ImageSelectionActivity extends BaseActivity {
           .setMessage(Constants.DIALOG_MSG_REMOVE_IMAGES)
           .setPositiveButton(Constants.REMOVE_BUTTON, (dialog, which) -> removeSelectedImages());
     }
-
     builder.show();
   }
 
@@ -656,7 +564,6 @@ public class ImageSelectionActivity extends BaseActivity {
     List<Integer> result = new ArrayList<>();
     SharedPreferences prefs = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
     String json = prefs.getString(PREF_IMAGE_ORDER, null);
-
     if (json != null) {
       try {
         Gson gson = new Gson();
@@ -666,12 +573,10 @@ public class ImageSelectionActivity extends BaseActivity {
         if (loadedIds != null) {
           result.addAll(loadedIds);
         }
-      } catch (Exception ignored) {
-        // Ignore parsing errors, return empty list
+      } catch (Exception ignored) {        /* Ignore parsing errors, return empty list */
         result.clear();
       }
     }
-
     return result;
   }
 
@@ -681,30 +586,24 @@ public class ImageSelectionActivity extends BaseActivity {
       exitMultiSelectMode();
       return false;
     }
-
     if (hasChanges) {
       showExitConfirmationDialog();
       return false;
     }
-
     finish();
     return true;
   }
 
   private void updateUIAfterLoading() {
     runOnUiThread(() -> {
-
       textViewSelectedNumber.setText(String.format(
           Locale.getDefault(),
           getString(R.string.selected_count_format),
           selectedImages.size()
       ));
-
       selectedAdapter.setImages(new ArrayList<>(selectedImages));
-
       updateUnselectedImages();
       updateSelectedSectionVisibility();
-
       updateMultiSelectControlsVisibility();
     });
   }
@@ -715,14 +614,12 @@ public class ImageSelectionActivity extends BaseActivity {
         .stream()
         .filter(image -> !image.source.equals(SOURCE_DEFAULT))
         .collect(Collectors.toList());
-
     if (!customImagesToRemove.isEmpty()) {
       executor.execute(() -> {
         try {
           for (Image image : customImagesToRemove) {
             db.imageDao().deleteImage(image);
           }
-
           runOnUiThread(() -> {
             loadImages();
             Toast.makeText(this, Constants.TOAST_IMAGES_DELETED, Toast.LENGTH_SHORT).show();
@@ -735,7 +632,6 @@ public class ImageSelectionActivity extends BaseActivity {
         }
       });
     } else if (!selectedForRemoval.isEmpty()) {
-
       Toast.makeText(this, Constants.TOAST_DEFAULT_NOT_REMOVED, Toast.LENGTH_SHORT).show();
       exitMultiSelectMode();
     }
@@ -748,10 +644,8 @@ public class ImageSelectionActivity extends BaseActivity {
         .setPositiveButton(Constants.SAVE_AND_EXIT_BUTTON, (dialog, which) -> saveAndExit())
         .setNegativeButton(
             Constants.EXIT_WITHOUT_SAVING_BUTTON, (dialog, which) -> {
-
               selectedImages = new ArrayList<>(initialSelectedImages);
               hasChanges = false;
-
               finish();
             }
         )
@@ -760,9 +654,7 @@ public class ImageSelectionActivity extends BaseActivity {
   }
 
   private void saveAndExit() {
-
     saveSelectedImages();
-
     Intent resultIntent = new Intent();
     resultIntent.putExtra(
         "selected_image_ids",
@@ -777,7 +669,6 @@ public class ImageSelectionActivity extends BaseActivity {
       List<Image> currentlySelected
   ) {
     List<Image> imagesToAdd = new ArrayList<>();
-
     for (Image image : allImages) {
       if (selectedImageIds.contains(image.id) && !isImageAlreadySelected(
           image,
@@ -786,7 +677,6 @@ public class ImageSelectionActivity extends BaseActivity {
         imagesToAdd.add(image);
       }
     }
-
     return imagesToAdd;
   }
 
@@ -797,46 +687,35 @@ public class ImageSelectionActivity extends BaseActivity {
   }
 
   private void addSelectedImagesToSelection() {
-
     List<Integer> selectedImageIds = unselectedAdapter.getSelectedImageIds();
-
     if (selectedImageIds.isEmpty()) {
       Toast.makeText(this, Constants.TOAST_NO_IMAGES_SELECTED_ADD, Toast.LENGTH_SHORT).show();
       return;
     }
-
     hasChanges = true;
-
     List<Image> currentlySelected = getCurrentlySelectedImages();
     List<Image> imagesToAdd = findImagesToAdd(selectedImageIds, currentlySelected);
     List<Image> newCombinedList = combineImageLists(currentlySelected, imagesToAdd);
-
     updateSelectionWithNewList(newCombinedList);
     updateUiAfterSelectionChange();
-
     exitMultiSelectMode();
   }
 
   private void updateSelectionWithNewList(List<Image> newSelectedList) {
-
     selectedImages = newSelectedList;
-
     List<Image> adapterImages = new ArrayList<>();
     for (Image img : newSelectedList) {
       if (img != null) {
         adapterImages.add(img);
       }
     }
-
     selectedAdapter.setImages(adapterImages);
   }
 
   private void updateSelectedSectionVisibility() {
     boolean hasSelectedImages = !selectedImages.isEmpty();
-
     textViewSelected.setVisibility(View.VISIBLE);
     recyclerViewSelected.setVisibility(hasSelectedImages ? View.VISIBLE : View.GONE);
-
     if (hasSelectedImages) {
       textViewSelectedNumber.setText(String.format(
           Locale.getDefault(),
@@ -883,7 +762,6 @@ public class ImageSelectionActivity extends BaseActivity {
       exitMultiSelectMode();
       return true;
     } else if (item.getItemId() == android.R.id.home) {
-
       getOnBackPressedDispatcher().onBackPressed();
       return true;
     } else if (item.getItemId() == R.id.action_done) {
@@ -899,43 +777,32 @@ public class ImageSelectionActivity extends BaseActivity {
 
   @Override
   public void finish() {
-
     if (hasChanges) {
-
       selectedImages = initialSelectedImages;
     }
     super.finish();
   }
 
   private void saveSelectedImages() {
-
     List<Image> currentOrderedImages = selectedAdapter.getImages();
     if (currentOrderedImages != null && !currentOrderedImages.isEmpty()) {
       selectedImages = new ArrayList<>(currentOrderedImages);
     }
-
     Set<Integer> selectedImageIds = new HashSet<>();
-
     for (Image image : selectedImages) {
       selectedImageIds.add(image.id);
     }
-
     SelectedImagesManager.saveSelectedImages(this, selectedImageIds);
-
     persistImageOrder();
-
     hasChanges = false;
-
     Toast.makeText(this, Constants.TOAST_SELECTION_SAVED, Toast.LENGTH_SHORT).show();
   }
 
   private void persistImageOrder() {
-
     List<Integer> imageIds = new ArrayList<>();
     for (Image image : selectedImages) {
       imageIds.add(image.id);
     }
-
     SharedPreferences prefs = getSharedPreferences(PREF_NAME, MODE_PRIVATE);
     Gson gson = new Gson();
     String json = gson.toJson(imageIds);
@@ -959,46 +826,36 @@ public class ImageSelectionActivity extends BaseActivity {
   }
 
   private void updateUiAfterSelectionChange() {
-
     textViewSelectedNumber.setText(String.format(
         Locale.getDefault(),
         getString(R.string.selected_count_format),
         selectedImages.size()
     ));
-
     saveImageOrder();
-
     updateUnselectedImages();
-
     updateSelectedSectionVisibility();
   }
 
   private void openImagePicker() {
-
     pickImageLauncher.launch("image/*");
     Toast.makeText(this, Constants.TOAST_MULTI_SELECT_HINT, Toast.LENGTH_SHORT).show();
   }
 
   private void handleMultipleImageSelection(List<Uri> imageUris) {
-
     if (imageUris == null || imageUris.isEmpty()) {
       return;
     }
-
     final int imageCount = imageUris.size();
     processAndSaveImages(imageUris, imageCount);
   }
 
   private void processAndSaveImages(List<Uri> imageUris, final int imageCount) {
     final List<Image> newImages = new ArrayList<>();
-
     executor.execute(() -> {
       try {
-
         for (Uri imageUri : imageUris) {
           processImageUri(imageUri, newImages);
         }
-
         updateUIAfterImageProcessing(imageCount, newImages);
       } catch (Exception e) {
         showImageSaveError(e);
@@ -1015,14 +872,11 @@ public class ImageSelectionActivity extends BaseActivity {
   }
 
   private void updateUnselectedImages() {
-
     List<Image> unselected = new ArrayList<>();
-
     List<Image> currentlySelected = new ArrayList<>();
     if (selectedAdapter != null && selectedAdapter.getImages() != null) {
       currentlySelected.addAll(selectedAdapter.getImages());
     }
-
     for (Image image : allImages) {
       boolean isSelected = false;
       for (Image selected : currentlySelected) {
@@ -1031,12 +885,10 @@ public class ImageSelectionActivity extends BaseActivity {
           break;
         }
       }
-
       if (!isSelected) {
         unselected.add(image);
       }
     }
-
     unselectedAdapter.updateImages(unselected);
   }
 
@@ -1053,16 +905,12 @@ public class ImageSelectionActivity extends BaseActivity {
   private void processImageUri(Uri imageUri, List<Image> newImages) {
     String fileName = "Custom_" + System.currentTimeMillis();
     Image newImage = new Image(fileName, SOURCE_CUSTOM, imageUri.toString());
-
     try {
       getContentResolver().takePersistableUriPermission(
           imageUri,
           Intent.FLAG_GRANT_READ_URI_PERMISSION
       );
-    } catch (SecurityException ignored) {
-      // Ignore
-    }
-
+    } catch (SecurityException ignored) {      /* Ignore */ }
     long id = db.imageDao().insertImage(newImage);
     newImage.id = (int) id;
     newImages.add(newImage);
@@ -1092,7 +940,6 @@ public class ImageSelectionActivity extends BaseActivity {
 
   private boolean handleImageLongClick(Image image) {
     if (!isMultiSelectMode) {
-
       isMultiSelectMode = true;
       unselectedAdapter.setMultiSelectMode(true);
       unselectedAdapter.toggleImageSelection(image);
@@ -1112,14 +959,10 @@ public class ImageSelectionActivity extends BaseActivity {
    * Calculate number of columns for the grid based on screen width
    */
   private int calculateSpanCount() {
-
     int screenWidth = getResources().getDisplayMetrics().widthPixels;
-
     int idealItemWidth = 100;
-
     float density = getResources().getDisplayMetrics().density;
     int itemWidthInPixels = (int) (idealItemWidth * density);
-
     int spanCount = Math.max(2, screenWidth / itemWidthInPixels);
     return Math.min(spanCount, 4);
   }
@@ -1127,11 +970,10 @@ public class ImageSelectionActivity extends BaseActivity {
   private void setupUnselectedAdapter() {
     unselectedAdapter = new ImageAdapter(
         new ArrayList<>(),
-                                         this::handleImageSelection,
-                                         this::showImageOptionsDialog,
-                                         this::handleImageLongClick
+        this::handleImageSelection,
+        this::showImageOptionsDialog,
+        this::handleImageLongClick
     );
-
     unselectedAdapter.registerAdapterDataObserver(new RecyclerView.AdapterDataObserver() {
       @Override
       public void onChanged() {
@@ -1143,7 +985,6 @@ public class ImageSelectionActivity extends BaseActivity {
         updateSelectAllCheckboxState();
       }
     });
-
     RecyclerView recyclerViewUnselected = findViewById(R.id.recyclerViewUnselected);
     recyclerViewUnselected.setAdapter(unselectedAdapter);
   }
@@ -1185,7 +1026,7 @@ public class ImageSelectionActivity extends BaseActivity {
 
     @Override
     public void getItemOffsets(
-        @NonNull android.graphics.Rect outRect,
+        @NonNull Rect outRect,
         @NonNull View view,
         @NonNull RecyclerView parent,
         @NonNull RecyclerView.State state
@@ -1196,5 +1037,4 @@ public class ImageSelectionActivity extends BaseActivity {
       outRect.bottom = spacing;
     }
   }
-} 
-
+}
