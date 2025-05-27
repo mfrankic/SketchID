@@ -25,7 +25,7 @@ import androidx.room.RoomDatabase;
         MagneticFieldData.class,
         MagneticFieldBaselineData.class,
         AccelerometerData.class
-    }, version = 20, exportSchema = false
+    }, version = 21, exportSchema = false
 )
 public abstract class AppDatabase extends RoomDatabase {
   private static AppDatabase instance;

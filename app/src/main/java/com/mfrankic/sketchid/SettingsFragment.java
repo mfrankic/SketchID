@@ -1585,7 +1585,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
           requireContext().getTheme()
       ));
       clearDataPreference.setOnPreferenceClickListener(preference -> {
-        String dialogMessage = "Are you sure you want to delete ALL drawing data for ALL users?%n%n"
+        String dialogMessage = "Are you sure you want to delete ALL drawing data for ALL users?\n\n"
                                + "This action will permanently remove all drawing data from the "
                                + "database and cannot be undone.";
         Drawable dialogIcon = ResourcesCompat.getDrawable(

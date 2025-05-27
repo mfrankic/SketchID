@@ -50,7 +50,7 @@ public class ResourceUtils {
   private static void initializeDrawableMap() {
 
     drawableResourceMap.put("arrow", R.drawable.arrow);
-    drawableResourceMap.put("checkmark", R.drawable.checkmark);
+    drawableResourceMap.put("checkmark", R.drawable.check);
     drawableResourceMap.put("crown", R.drawable.crown);
     drawableResourceMap.put("envelope", R.drawable.envelope);
     drawableResourceMap.put("grid", R.drawable.grid);
@@ -81,7 +81,6 @@ public class ResourceUtils {
       return 0;
     }
 
-    // Normalize the name to lowercase to match the map keys
     String normalizedName = imageName.toLowerCase(Locale.ROOT);
     Integer resourceId = drawableResourceMap.get(normalizedName);
 
