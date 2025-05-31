@@ -42,4 +42,23 @@ public interface GyroscopeDataDao {
       + "WHERE u.id = :userId"
   )
   List<GyroscopeExportData> getGyroscopeDataWithUsersAndImagesByUserId(long userId);
+
+  @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
+  @Query(
+      "SELECT\n"
+      + "g.id, g.timestamp, g.x, g.y, g.z, g.attempt, g.session_id AS sessionId,\n"
+      + "u.id AS userId, u.name AS userName,\n"
+      + "g.image_id AS imageId, i.name AS imageName\n"
+      + "FROM gyroscope_data g\n"
+      + "LEFT JOIN user u ON g.user_id = u.id\n"
+      + "LEFT JOIN image i ON g.image_id = i.id\n"
+      + "WHERE u.id = :userId\n"
+      + "ORDER BY g.id ASC\n"
+      + "LIMIT :limit OFFSET :offset"
+  )
+  List<GyroscopeExportData> getPaginatedGyroscopeDataWithUsersAndImagesByUserId(
+      long userId,
+      int limit,
+      int offset
+  );
 } 

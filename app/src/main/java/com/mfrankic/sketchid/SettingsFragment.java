@@ -59,6 +59,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   private static final String UNKNOWN_VALUE = "unknown";
   private static final String UNKNOWN_IMAGE = "unknown_image";
   private static final String PROGRESS_ITEM_SUFFIX = " data";
+  private static final int EXPORT_PAGE_SIZE = 1000;
 
   private EditTextPreference newUserPreference;
   private EditTextPreference drawingAttemptsPreference;
@@ -485,6 +486,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     Executor parallelExecutor = Executors.newFixedThreadPool(dataTypes.length);
     CountDownLatch dataTypeLatch = new CountDownLatch(dataTypes.length);
     ConcurrentHashMap<String, Boolean> exportResults = new ConcurrentHashMap<>();
+    Map<String, UserProgressManager.Session> sessionCache = new HashMap<>();
 
     final String[] dataPrefixes = {
         Constants.DRAWING_DATA_PREFIX,
@@ -509,11 +511,12 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
     ExportTaskContext exportContext = new ExportTaskContext(
         userId,
-                                                            userDir,
-                                                            contentResolver,
-                                                            dataTypeLatch,
-                                                            exportResults,
-                                                            progressUpdater
+        userDir,
+        contentResolver,
+        dataTypeLatch,
+        exportResults,
+        progressUpdater,
+        sessionCache
     );
 
     // Launch Drawing Data Export
@@ -531,7 +534,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     }
 
     try {
-      boolean completed = dataTypeLatch.await(180, TimeUnit.SECONDS);
+      boolean completed = dataTypeLatch.await((12 * 60), TimeUnit.SECONDS);
       if (!completed) {
         android.util.Log.w(
             "ExportData",
@@ -591,22 +594,46 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   }
 
   private void launchDrawingDataExport(ExportTaskContext context, String dataType) {
-    boolean success = false;
+    boolean overallSuccess = true;
     try {
-      List<DrawingExportData> data = db
-          .drawingDataDao()
-          .getAllDrawingDataWithUsersAndImagesByUserID(context.userId);
-      processDrawingModes(data);
-      Map<String, List<DrawingExportData>> dataByMode = groupDataByDrawingMode(data);
-      success = exportDataByModeAndImage(dataByMode, context.userDir, context.contentResolver);
-      context.exportResults.put(dataType, success);
+      List<DrawingExportData> allDataForUser = new ArrayList<>();
+      int offset = 0;
+      boolean hasMoreData;
+
+      do {
+        List<DrawingExportData> pageData = db
+            .drawingDataDao()
+            .getPaginatedAllDrawingDataWithUsersAndImagesByUserID(
+                context.userId,
+                EXPORT_PAGE_SIZE,
+                offset
+            );
+
+        if (pageData != null && !pageData.isEmpty()) {
+          allDataForUser.addAll(pageData);
+          offset += pageData.size();
+          hasMoreData = pageData.size() == EXPORT_PAGE_SIZE;
+        } else {
+          hasMoreData = false;
+        }
+      } while (hasMoreData);
+
+      if (!allDataForUser.isEmpty()) {
+        processDrawingModes(allDataForUser, context.sessionCache);
+        Map<String, List<DrawingExportData>> dataByMode = groupDataByDrawingMode(allDataForUser);
+        overallSuccess = exportDataByModeAndImage(
+            dataByMode,
+            context.userDir,
+            context.contentResolver
+        );
+      }
     } catch (Exception e) {
       android.util.Log.e("ExportDrawingData", "Error exporting drawing data", e);
-      context.exportResults.put(dataType, false);
-      success = false;
+      overallSuccess = false;
     } finally {
+      context.exportResults.put(dataType, overallSuccess);
       context.dataTypeLatch.countDown();
-      context.progressUpdater.accept(dataType, success);
+      context.progressUpdater.accept(dataType, overallSuccess);
     }
   }
 
@@ -618,82 +645,189 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   ) {
     boolean success = false;
     String dataType = dataTypes[index];
+    Map<String, UserProgressManager.Session> sessionCache = context.sessionCache;
     try {
+      List<?> fullSensorDataList; // Use a generic list to hold data from different DAOs
       switch (index) {
         case 1: // Gravity
-          List<GravityExportData> gravityData = db
-              .gravityDataDao()
-              .getGravityDataWithUsersAndImagesByUserId(context.userId);
-          processGravityDrawingModes(gravityData);
-          Map<String, List<GravityExportData>> gravityDataByMode = groupGravityDataByDrawingMode(
-              gravityData);
-          success = exportSensorDataByModeAndImage(
-              gravityDataByMode,
-              context.userDir,
-              context.contentResolver,
-              dataPrefixes[index],
-              this::writeGravityDataToStream
-          );
+          List<GravityExportData> allGravityData = new ArrayList<>();
+          int gravityOffset = 0;
+          boolean hasMoreGravity;
+          do {
+            List<GravityExportData> pageData = db
+                .gravityDataDao()
+                .getPaginatedGravityDataWithUsersAndImagesByUserId(
+                    context.userId,
+                    EXPORT_PAGE_SIZE,
+                    gravityOffset
+                );
+            if (pageData != null && !pageData.isEmpty()) {
+              allGravityData.addAll(pageData);
+              gravityOffset += pageData.size();
+              hasMoreGravity = pageData.size() == EXPORT_PAGE_SIZE;
+            } else {
+              hasMoreGravity = false;
+            }
+          } while (hasMoreGravity);
+          fullSensorDataList = allGravityData;
+          if (!allGravityData.isEmpty()) {
+            processGravityDrawingModes(allGravityData, sessionCache);
+            Map<String, List<GravityExportData>> gravityDataByMode = groupGravityDataByDrawingMode(
+                allGravityData);
+            success = exportSensorDataByModeAndImage(
+                gravityDataByMode,
+                context.userDir,
+                context.contentResolver,
+                dataPrefixes[index],
+                this::writeGravityDataToStream
+            );
+          } else {
+            success = true;
+          } // No data is not an error
           break;
         case 2: // Gyroscope
-          List<GyroscopeExportData> gyroscopeData = db
-              .gyroscopeDataDao()
-              .getGyroscopeDataWithUsersAndImagesByUserId(context.userId);
-          processGyroscopeDrawingModes(gyroscopeData);
-          Map<String, List<GyroscopeExportData>> gyroscopeDataByMode
-              = groupGyroscopeDataByDrawingMode(gyroscopeData);
-          success = exportSensorDataByModeAndImage(
-              gyroscopeDataByMode,
-              context.userDir,
-              context.contentResolver,
-              dataPrefixes[index],
-              this::writeGyroscopeDataToStream
-          );
+          List<GyroscopeExportData> allGyroData = new ArrayList<>();
+          int gyroOffset = 0;
+          boolean hasMoreGyro;
+          do {
+            List<GyroscopeExportData> pageData = db
+                .gyroscopeDataDao()
+                .getPaginatedGyroscopeDataWithUsersAndImagesByUserId(
+                    context.userId,
+                    EXPORT_PAGE_SIZE,
+                    gyroOffset
+                );
+            if (pageData != null && !pageData.isEmpty()) {
+              allGyroData.addAll(pageData);
+              gyroOffset += pageData.size();
+              hasMoreGyro = pageData.size() == EXPORT_PAGE_SIZE;
+            } else {
+              hasMoreGyro = false;
+            }
+          } while (hasMoreGyro);
+          fullSensorDataList = allGyroData;
+          if (!allGyroData.isEmpty()) {
+            processGyroscopeDrawingModes(allGyroData, sessionCache);
+            Map<String, List<GyroscopeExportData>> gyroscopeDataByMode
+                = groupGyroscopeDataByDrawingMode(allGyroData);
+            success = exportSensorDataByModeAndImage(
+                gyroscopeDataByMode,
+                context.userDir,
+                context.contentResolver,
+                dataPrefixes[index],
+                this::writeGyroscopeDataToStream
+            );
+          } else {
+            success = true;
+          }
           break;
         case 3: // Magnetic Field
-          List<MagneticFieldExportData> magneticFieldData = db
-              .magneticFieldDataDao()
-              .getMagneticFieldDataWithUsersAndImagesByUserId(context.userId);
-          processMagneticFieldDrawingModes(magneticFieldData);
-          Map<String, List<MagneticFieldExportData>> magneticFieldDataByMode
-              = groupMagneticFieldDataByDrawingMode(magneticFieldData);
-          success = exportSensorDataByModeAndImage(
-              magneticFieldDataByMode,
-              context.userDir,
-              context.contentResolver,
-              dataPrefixes[index],
-              this::writeMagneticFieldDataToStream
-          );
+          List<MagneticFieldExportData> allMagData = new ArrayList<>();
+          int magOffset = 0;
+          boolean hasMoreMag;
+          do {
+            List<MagneticFieldExportData> pageData = db
+                .magneticFieldDataDao()
+                .getPaginatedMagneticFieldDataWithUsersAndImagesByUserId(
+                    context.userId,
+                    EXPORT_PAGE_SIZE,
+                    magOffset
+                );
+            if (pageData != null && !pageData.isEmpty()) {
+              allMagData.addAll(pageData);
+              magOffset += pageData.size();
+              hasMoreMag = pageData.size() == EXPORT_PAGE_SIZE;
+            } else {
+              hasMoreMag = false;
+            }
+          } while (hasMoreMag);
+          fullSensorDataList = allMagData;
+          if (!allMagData.isEmpty()) {
+            processMagneticFieldDrawingModes(allMagData, sessionCache);
+            Map<String, List<MagneticFieldExportData>> magneticFieldDataByMode
+                = groupMagneticFieldDataByDrawingMode(allMagData);
+            success = exportSensorDataByModeAndImage(
+                magneticFieldDataByMode,
+                context.userDir,
+                context.contentResolver,
+                dataPrefixes[index],
+                this::writeMagneticFieldDataToStream
+            );
+          } else {
+            success = true;
+          }
           break;
         case 4: // Magnetic Baseline
-          List<MagneticFieldBaselineExportData> magneticBaselineData = db
-              .magneticFieldBaselineDataDao()
-              .getBaselineDataWithUsersAndImagesByUserId(context.userId);
-          processMagneticFieldBaselineDrawingModes(magneticBaselineData);
-          Map<String, List<MagneticFieldBaselineExportData>> magneticBaselineDataByMode
-              = groupMagneticFieldBaselineDataByDrawingMode(magneticBaselineData);
-          success = exportSensorDataByModeAndImage(
-              magneticBaselineDataByMode,
-              context.userDir,
-              context.contentResolver,
-              dataPrefixes[index],
-              this::writeMagneticFieldBaselineDataToStream
-          );
+          List<MagneticFieldBaselineExportData> allMagBaselineData = new ArrayList<>();
+          int magBaselineOffset = 0;
+          boolean hasMoreMagBaseline;
+          do {
+            List<MagneticFieldBaselineExportData> pageData = db
+                .magneticFieldBaselineDataDao()
+                .getPaginatedBaselineDataWithUsersAndImagesByUserId(
+                    context.userId,
+                    EXPORT_PAGE_SIZE,
+                    magBaselineOffset
+                );
+            if (pageData != null && !pageData.isEmpty()) {
+              allMagBaselineData.addAll(pageData);
+              magBaselineOffset += pageData.size();
+              hasMoreMagBaseline = pageData.size() == EXPORT_PAGE_SIZE;
+            } else {
+              hasMoreMagBaseline = false;
+            }
+          } while (hasMoreMagBaseline);
+          fullSensorDataList = allMagBaselineData;
+          if (!allMagBaselineData.isEmpty()) {
+            processMagneticFieldBaselineDrawingModes(allMagBaselineData, sessionCache);
+            Map<String, List<MagneticFieldBaselineExportData>> magneticBaselineDataByMode
+                = groupMagneticFieldBaselineDataByDrawingMode(allMagBaselineData);
+            success = exportSensorDataByModeAndImage(
+                magneticBaselineDataByMode,
+                context.userDir,
+                context.contentResolver,
+                dataPrefixes[index],
+                this::writeMagneticFieldBaselineDataToStream
+            );
+          } else {
+            success = true;
+          }
           break;
         case 5: // Accelerometer
-          List<AccelerometerExportData> accelerometerData = db
-              .accelerometerDataDao()
-              .getAccelerometerDataWithUsersAndImagesByUserId(context.userId);
-          processAccelerometerDrawingModes(accelerometerData);
-          Map<String, List<AccelerometerExportData>> accelerometerDataByMode
-              = groupAccelerometerDataByDrawingMode(accelerometerData);
-          success = exportSensorDataByModeAndImage(
-              accelerometerDataByMode,
-              context.userDir,
-              context.contentResolver,
-              dataPrefixes[index],
-              this::writeAccelerometerDataToStream
-          );
+          List<AccelerometerExportData> allAccelData = new ArrayList<>();
+          int accelOffset = 0;
+          boolean hasMoreAccel;
+          do {
+            List<AccelerometerExportData> pageData = db
+                .accelerometerDataDao()
+                .getPaginatedAccelerometerDataWithUsersAndImagesByUserId(
+                    context.userId,
+                    EXPORT_PAGE_SIZE,
+                    accelOffset
+                );
+            if (pageData != null && !pageData.isEmpty()) {
+              allAccelData.addAll(pageData);
+              accelOffset += pageData.size();
+              hasMoreAccel = pageData.size() == EXPORT_PAGE_SIZE;
+            } else {
+              hasMoreAccel = false;
+            }
+          } while (hasMoreAccel);
+          fullSensorDataList = allAccelData;
+          if (!allAccelData.isEmpty()) {
+            processAccelerometerDrawingModes(allAccelData, sessionCache);
+            Map<String, List<AccelerometerExportData>> accelerometerDataByMode
+                = groupAccelerometerDataByDrawingMode(allAccelData);
+            success = exportSensorDataByModeAndImage(
+                accelerometerDataByMode,
+                context.userDir,
+                context.contentResolver,
+                dataPrefixes[index],
+                this::writeAccelerometerDataToStream
+            );
+          } else {
+            success = true;
+          }
           break;
         default:
           throw new IllegalArgumentException("Invalid data type index: " + index);
@@ -912,12 +1046,16 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   /**
    * Process drawing data to add drawing mode information from session settings
    */
-  private void processDrawingModes(List<DrawingExportData> drawingDataList) {
+  private void processDrawingModes(
+      List<DrawingExportData> drawingDataList,
+      Map<String, UserProgressManager.Session> sessionCache
+  ) {
     processDataModes(
         drawingDataList,
         DrawingExportData::getSessionID,
         DrawingExportData::getUserID,
-        DrawingExportData::setDrawingMode
+        DrawingExportData::setDrawingMode,
+        sessionCache
     );
   }
 
@@ -928,19 +1066,21 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       List<T> dataList,
       Function<T, String> sessionIdGetter,
       ToLongFunction<T> userIdGetter,
-      BiConsumer<T, String> drawingModeSetter
+      BiConsumer<T, String> drawingModeSetter,
+      Map<String, UserProgressManager.Session> sessionCache
   ) {
-
     for (T data : dataList) {
       String sessionId = sessionIdGetter.apply(data);
 
       if (sessionId != null) {
         long userId = userIdGetter.applyAsLong(data);
-        UserProgressManager.Session session = UserProgressManager.getSession(
-            requireContext(),
-            userId,
-            sessionId
-        );
+        UserProgressManager.Session session = sessionCache.get(sessionId);
+        if (session == null) {
+          session = UserProgressManager.getSession(requireContext(), userId, sessionId);
+          if (session != null) { // Add to cache only if session is successfully loaded
+            sessionCache.put(sessionId, session);
+          }
+        }
 
         String drawingMode = extractDrawingModeFromSession(session);
         drawingModeSetter.accept(data, drawingMode);
@@ -1155,39 +1295,55 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     }
   }
 
-  private void processGravityDrawingModes(List<GravityExportData> gravityDataList) {
+  private void processGravityDrawingModes(
+      List<GravityExportData> gravityDataList,
+      Map<String, UserProgressManager.Session> sessionCache
+  ) {
     processDataModes(
         gravityDataList,
         GravityExportData::getSessionId,
         GravityExportData::getUserId,
-        GravityExportData::setDrawingMode
+        GravityExportData::setDrawingMode,
+        sessionCache
     );
   }
 
-  private void processGyroscopeDrawingModes(List<GyroscopeExportData> gyroscopeDataList) {
+  private void processGyroscopeDrawingModes(
+      List<GyroscopeExportData> gyroscopeDataList,
+      Map<String, UserProgressManager.Session> sessionCache
+  ) {
     processDataModes(
         gyroscopeDataList,
         GyroscopeExportData::getSessionId,
         GyroscopeExportData::getUserId,
-        GyroscopeExportData::setDrawingMode
+        GyroscopeExportData::setDrawingMode,
+        sessionCache
     );
   }
 
-  private void processMagneticFieldDrawingModes(List<MagneticFieldExportData> magneticFieldDataList) {
+  private void processMagneticFieldDrawingModes(
+      List<MagneticFieldExportData> magneticFieldDataList,
+      Map<String, UserProgressManager.Session> sessionCache
+  ) {
     processDataModes(
         magneticFieldDataList,
         MagneticFieldExportData::getSessionId,
         MagneticFieldExportData::getUserId,
-        MagneticFieldExportData::setDrawingMode
+        MagneticFieldExportData::setDrawingMode,
+        sessionCache
     );
   }
 
-  private void processMagneticFieldBaselineDrawingModes(List<MagneticFieldBaselineExportData> magneticFieldBaselineDataList) {
+  private void processMagneticFieldBaselineDrawingModes(
+      List<MagneticFieldBaselineExportData> magneticFieldBaselineDataList,
+      Map<String, UserProgressManager.Session> sessionCache
+  ) {
     processDataModes(
         magneticFieldBaselineDataList,
         MagneticFieldBaselineExportData::getSessionId,
         MagneticFieldBaselineExportData::getUserId,
-        MagneticFieldBaselineExportData::setDrawingMode
+        MagneticFieldBaselineExportData::setDrawingMode,
+        sessionCache
     );
   }
 
@@ -1200,12 +1356,16 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     return modeDir;
   }
 
-  private void processAccelerometerDrawingModes(List<AccelerometerExportData> accelerometerDataList) {
+  private void processAccelerometerDrawingModes(
+      List<AccelerometerExportData> accelerometerDataList,
+      Map<String, UserProgressManager.Session> sessionCache
+  ) {
     processDataModes(
         accelerometerDataList,
         AccelerometerExportData::getSessionId,
         AccelerometerExportData::getUserId,
-        AccelerometerExportData::setDrawingMode
+        AccelerometerExportData::setDrawingMode,
+        sessionCache
     );
   }
 
@@ -1668,6 +1828,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     final CountDownLatch dataTypeLatch;
     final ConcurrentHashMap<String, Boolean> exportResults;
     final BiConsumer<String, Boolean> progressUpdater;
+    final Map<String, UserProgressManager.Session> sessionCache;
 
     ExportTaskContext(
         long userId,
@@ -1675,7 +1836,8 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         ContentResolver contentResolver,
         CountDownLatch dataTypeLatch,
         ConcurrentHashMap<String, Boolean> exportResults,
-        BiConsumer<String, Boolean> progressUpdater
+        BiConsumer<String, Boolean> progressUpdater,
+        Map<String, UserProgressManager.Session> sessionCache
     ) {
       this.userId = userId;
       this.userDir = userDir;
@@ -1683,6 +1845,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       this.dataTypeLatch = dataTypeLatch;
       this.exportResults = exportResults;
       this.progressUpdater = progressUpdater;
+      this.sessionCache = sessionCache;
     }
   }
 

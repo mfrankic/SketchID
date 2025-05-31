@@ -42,6 +42,25 @@ public interface DrawingDataDao {
   )
   List<DrawingExportData> getAllDrawingDataWithUsersAndImagesByUserID(long userID);
 
+  @Query(
+      "SELECT\n"
+      + "d.id, d.time, d.x, d.y, d.`action`, d.attempt, d.item_type AS itemType,\n"
+      + "d.session_id AS sessionID, d.size, d.pressure, d.orientation,\n"
+      + "u.id AS userID, u.name AS userName,\n"
+      + "d.image_id AS imageID, i.name AS imageName\n"
+      + "FROM drawing_data d\n"
+      + "LEFT JOIN user u ON d.user_id = u.id\n"
+      + "LEFT JOIN image i ON d.image_id = i.id\n"
+      + "WHERE u.id = :userID\n"
+      + "ORDER BY d.id ASC\n"
+      + "LIMIT :limit OFFSET :offset"
+  )
+  List<DrawingExportData> getPaginatedAllDrawingDataWithUsersAndImagesByUserID(
+      long userID,
+      int limit,
+      int offset
+  );
+
   /**
    * Deletes all drawing data from the database.
    * Use with caution as this will remove all drawing records.

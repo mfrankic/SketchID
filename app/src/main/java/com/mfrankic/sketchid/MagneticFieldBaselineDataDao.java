@@ -38,4 +38,19 @@ public interface MagneticFieldBaselineDataDao {
       + "ORDER BY mfbd.timestamp ASC"
   )
   List<MagneticFieldBaselineExportData> getBaselineDataWithUsersAndImagesByUserId(long userId);
+
+  @Query(
+      "SELECT mfbd.*, u.name as user_name, i.name as image_name "
+      + "FROM magnetic_field_baseline_data mfbd "
+      + "INNER JOIN user u ON mfbd.user_id = u.id "
+      + "INNER JOIN image i ON mfbd.image_id = i.id "
+      + "WHERE mfbd.user_id = :userId "
+      + "ORDER BY mfbd.id ASC\n"
+      + "LIMIT :limit OFFSET :offset"
+  )
+  List<MagneticFieldBaselineExportData> getPaginatedBaselineDataWithUsersAndImagesByUserId(
+      long userId,
+      int limit,
+      int offset
+  );
 } 

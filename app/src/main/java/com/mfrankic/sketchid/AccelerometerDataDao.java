@@ -43,4 +43,23 @@ public interface AccelerometerDataDao {
       + "WHERE u.id = :userId"
   )
   List<AccelerometerExportData> getAccelerometerDataWithUsersAndImagesByUserId(long userId);
+
+  @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
+  @Query(
+      "SELECT\n"
+      + "a.id, a.timestamp, a.x, a.y, a.z, a.attempt, a.session_id AS sessionId,\n"
+      + "u.id AS userId, u.name AS userName,\n"
+      + "a.image_id AS imageId, i.name AS imageName\n"
+      + "FROM accelerometer_data a\n"
+      + "LEFT JOIN user u ON a.user_id = u.id\n"
+      + "LEFT JOIN image i ON a.image_id = i.id\n"
+      + "WHERE u.id = :userId\n"
+      + "ORDER BY a.id ASC\n"
+      + "LIMIT :limit OFFSET :offset"
+  )
+  List<AccelerometerExportData> getPaginatedAccelerometerDataWithUsersAndImagesByUserId(
+      long userId,
+      int limit,
+      int offset
+  );
 } 
