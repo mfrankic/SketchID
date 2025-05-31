@@ -213,10 +213,10 @@ public class ImageAdapter extends ListAdapter<Image, ImageAdapter.ImageViewHolde
   }
 
   public static class ImageViewHolder extends RecyclerView.ViewHolder {
-    ImageView imageView;
-    TextView imageName;
-    TextView errorText;
-    ImageButton btnOptions;
+    final ImageView imageView;
+    final TextView imageName;
+    final TextView errorText;
+    final ImageButton btnOptions;
 
     ImageViewHolder(@NonNull View itemView) {
       super(itemView);

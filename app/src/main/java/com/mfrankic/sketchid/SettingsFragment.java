@@ -617,85 +617,13 @@ public class SettingsFragment extends PreferenceFragmentCompat {
             );
 
         if (pageData != null && !pageData.isEmpty()) {
-          processDrawingModes(pageData, context.sessionCache);
-          // Use specific types for DrawingExportData
-          Map<String, List<DrawingExportData>> dataByModeOnPage = groupDataByDrawingMode(pageData);
-
-          for (Map.Entry<String, List<DrawingExportData>> modeEntry : dataByModeOnPage.entrySet()) {
-            String mode = modeEntry.getKey();
-            List<DrawingExportData> modeDataOnPage = modeEntry.getValue();
-            File modeDir = createModeDirectory(context.userDir, mode);
-            if (modeDir == null) {
-              overallSuccess = false;
-              continue; // Skip this mode if directory creation fails
-            }
-
-            Map<String, List<DrawingExportData>> dataByImageOnPage = groupDrawingDataByImage(
-                modeDataOnPage);
-            for (Map.Entry<String, List<DrawingExportData>> imageEntry :
-                dataByImageOnPage.entrySet()) {
-              String imageName = imageEntry.getKey();
-              List<DrawingExportData> imageDataOnPage = imageEntry.getValue();
-
-              String formattedImageName = imageName.toLowerCase().replace(" ", "_");
-              String formattedDataType = formatDataTypeForFilename(Constants.DRAWING_DATA_PREFIX);
-              String fileName = formattedImageName + "_" + formattedDataType + ".csv";
-              File csvFile = new File(modeDir, fileName);
-
-              try {
-                OutputStream outputStream = openStreams.get(csvFile);
-                if (outputStream == null) {
-                  OutputStream rawOutputStream
-                      = context.contentResolver.openOutputStream(Uri.fromFile(csvFile));
-                  if (rawOutputStream != null) {
-                    outputStream = new BufferedOutputStream(rawOutputStream, BUFFERED_STREAM_SIZE);
-                    openStreams.put(csvFile, outputStream);
-                  } else {
-                    showExportMessage("Failed to open stream for: " + csvFile.getName());
-                    overallSuccess = false;
-                    continue;
-                  }
-                }
-
-                if (!filesWithHeaders.contains(csvFile)) {
-                  String currentHeaders = "";
-                  switch (dataType) {
-                    case "Drawing":
-                      currentHeaders = Constants.COLUMN_HEADERS;
-                      break;
-                    case "Gravity":
-                      currentHeaders = Constants.GRAVITY_COLUMN_HEADERS;
-                      break;
-                    case "Gyroscope":
-                      currentHeaders = Constants.GYROSCOPE_COLUMN_HEADERS;
-                      break;
-                    case "Magnetic Field":
-                      currentHeaders = Constants.MAGNETIC_FIELD_COLUMN_HEADERS;
-                      break;
-                    case "Magnetic Baseline":
-                      currentHeaders = Constants.MAGNETIC_FIELD_BASELINE_COLUMN_HEADERS;
-                      break;
-                    case "Accelerometer":
-                      currentHeaders = Constants.ACCELEROMETER_COLUMN_HEADERS;
-                      break;
-                  }
-                  if (!currentHeaders.isEmpty()) {
-                    outputStream.write(currentHeaders.getBytes());
-                  }
-                  filesWithHeaders.add(csvFile);
-                }
-
-                // Call specific write method - for DrawingData, it's always
-                // writeDrawingDataToStream
-                // The switch (dataType) here was incorrect as dataType is always "Drawing"
-                writeDrawingDataToStream(outputStream, imageDataOnPage);
-
-              } catch (IOException e) {
-                showExportMessage("Error writing " + dataType + " to: " + csvFile.getName());
-                overallSuccess = false;
-              }
-            }
-          }
+          overallSuccess &= processDrawingDataPage(
+              context,
+              dataType,
+              pageData,
+              openStreams,
+              filesWithHeaders
+          );
           offset += pageData.size();
           hasMoreData = pageData.size() == EXPORT_PAGE_SIZE;
         } else {
@@ -707,17 +635,107 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       android.util.Log.e("ExportDrawingData", "Error exporting drawing data", e);
       overallSuccess = false;
     } finally {
-      for (OutputStream stream : openStreams.values()) {
-        try {
-          stream.close();
-        } catch (IOException e) {
-          android.util.Log.e("ExportDrawingData", "Error closing stream", e);
+      closeAndFinalizeExport(context, dataType, openStreams, overallSuccess);
+    }
+  }
+
+  private boolean processDrawingDataPage(
+      ExportTaskContext context,
+      String dataType,
+      List<DrawingExportData> pageData,
+      Map<File, OutputStream> openStreams,
+      Set<File> filesWithHeaders
+  ) {
+    boolean pageSuccess = true;
+    processDrawingModes(pageData, context.sessionCache);
+    Map<String, List<DrawingExportData>> dataByModeOnPage = groupDataByDrawingMode(pageData);
+
+    for (Map.Entry<String, List<DrawingExportData>> modeEntry : dataByModeOnPage.entrySet()) {
+      String mode = modeEntry.getKey();
+      List<DrawingExportData> modeDataOnPage = modeEntry.getValue();
+      File modeDir = createModeDirectory(context.userDir, mode);
+      if (modeDir == null) {
+        pageSuccess = false;
+        continue;
+      }
+
+      Map<String, List<DrawingExportData>> dataByImageOnPage = groupDrawingDataByImage(
+          modeDataOnPage);
+      for (Map.Entry<String, List<DrawingExportData>> imageEntry : dataByImageOnPage.entrySet()) {
+        String imageName = imageEntry.getKey();
+        List<DrawingExportData> imageDataOnPage = imageEntry.getValue();
+        pageSuccess &= writeDrawingDataForImage(
+            context,
+            dataType,
+            modeDir,
+            imageName,
+            imageDataOnPage,
+            openStreams,
+            filesWithHeaders
+        );
+      }
+    }
+    return pageSuccess;
+  }
+
+  private boolean writeDrawingDataForImage(
+      ExportTaskContext context,
+      String dataType,
+      File modeDir,
+      String imageName,
+      List<DrawingExportData> imageDataOnPage,
+      Map<File, OutputStream> openStreams,
+      Set<File> filesWithHeaders
+  ) {
+    String formattedImageName = imageName.toLowerCase().replace(" ", "_");
+    String formattedDataType = formatDataTypeForFilename(Constants.DRAWING_DATA_PREFIX);
+    String fileName = formattedImageName + "_" + formattedDataType + ".csv";
+    File csvFile = new File(modeDir, fileName);
+    boolean success = true;
+
+    try {
+      OutputStream outputStream = openStreams.get(csvFile);
+      if (outputStream == null) {
+        OutputStream rawOutputStream
+            = context.contentResolver.openOutputStream(Uri.fromFile(csvFile));
+        if (rawOutputStream != null) {
+          outputStream = new BufferedOutputStream(rawOutputStream, BUFFERED_STREAM_SIZE);
+          openStreams.put(csvFile, outputStream);
+        } else {
+          showExportMessage("Failed to open stream for: " + csvFile.getName());
+          return false;
         }
       }
-      context.exportResults.put(dataType, overallSuccess);
-      context.dataTypeLatch.countDown();
-      context.progressUpdater.accept(dataType, overallSuccess);
+
+      if (!filesWithHeaders.contains(csvFile)) {
+        String currentHeaders = Constants.COLUMN_HEADERS;
+        outputStream.write(currentHeaders.getBytes(StandardCharsets.UTF_8));
+        filesWithHeaders.add(csvFile);
+      }
+      writeDrawingDataToStream(outputStream, imageDataOnPage);
+    } catch (IOException e) {
+      showExportMessage("Error writing " + dataType + " to: " + csvFile.getName());
+      success = false;
     }
+    return success;
+  }
+
+  private void closeAndFinalizeExport(
+      ExportTaskContext context,
+      String dataType,
+      Map<File, OutputStream> openStreams,
+      boolean overallSuccess
+  ) {
+    for (OutputStream stream : openStreams.values()) {
+      try {
+        stream.close();
+      } catch (IOException e) {
+        android.util.Log.e("Export" + dataType + "Data", "Error closing stream", e);
+      }
+    }
+    context.exportResults.put(dataType, overallSuccess);
+    context.dataTypeLatch.countDown();
+    context.progressUpdater.accept(dataType, overallSuccess);
   }
 
   private void writeDrawingDataToStream(OutputStream outputStream, List<DrawingExportData> modeData)
@@ -1193,10 +1211,6 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     );
   }
 
-  private Map<String, List<GravityExportData>> groupGravityDataByDrawingMode(List<GravityExportData> gravityDataList) {
-    return groupDataByMode(gravityDataList, GravityExportData::getDrawingMode);
-  }
-
   private <T> Map<String, List<T>> groupDataByMode(
       List<T> dataList,
       Function<T, String> modeGetter
@@ -1246,206 +1260,22 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       boolean hasMoreData;
 
       do {
-        List<? extends ExportableData> pageData = null;
-        // String specificColumnHeaders = ""; // No longer needed here
-        // SensorDataWriter<?> specificWriter = null; // No longer needed
-
-        switch (index) {
-          case 1: // Gravity
-            pageData = db
-                .gravityDataDao()
-                .getPaginatedGravityDataWithUsersAndImagesByUserId(
-                    context.userId,
-                    EXPORT_PAGE_SIZE,
-                    offset
-                );
-            if (pageData != null && !pageData.isEmpty())
-              processGravityDrawingModes((List<GravityExportData>) pageData, sessionCache);
-            // specificColumnHeaders = Constants.GRAVITY_COLUMN_HEADERS; // Moved
-            // specificWriter = (outputStream, dataList) -> writeGravityDataToStream
-            // (outputStream, (List<GravityExportData>) dataList); // Removed
-            break;
-          case 2: // Gyroscope
-            pageData = db
-                .gyroscopeDataDao()
-                .getPaginatedGyroscopeDataWithUsersAndImagesByUserId(
-                    context.userId,
-                    EXPORT_PAGE_SIZE,
-                    offset
-                );
-            if (pageData != null && !pageData.isEmpty())
-              processGyroscopeDrawingModes((List<GyroscopeExportData>) pageData, sessionCache);
-            // specificColumnHeaders = Constants.GYROSCOPE_COLUMN_HEADERS; // Moved
-            // specificWriter = (outputStream, dataList) -> writeGyroscopeDataToStream
-            // (outputStream, (List<GyroscopeExportData>) dataList); // Removed
-            break;
-          case 3: // Magnetic Field
-            pageData = db
-                .magneticFieldDataDao()
-                .getPaginatedMagneticFieldDataWithUsersAndImagesByUserId(
-                    context.userId,
-                    EXPORT_PAGE_SIZE,
-                    offset
-                );
-            if (pageData != null && !pageData.isEmpty())
-              processMagneticFieldDrawingModes(
-                  (List<MagneticFieldExportData>) pageData,
-                  sessionCache
-              );
-            // specificColumnHeaders = Constants.MAGNETIC_FIELD_COLUMN_HEADERS; // Moved
-            // specificWriter = (outputStream, dataList) -> writeMagneticFieldDataToStream
-            // (outputStream, (List<MagneticFieldExportData>) dataList); // Removed
-            break;
-          case 4: // Magnetic Baseline
-            pageData = db
-                .magneticFieldBaselineDataDao()
-                .getPaginatedBaselineDataWithUsersAndImagesByUserId(
-                    context.userId,
-                    EXPORT_PAGE_SIZE,
-                    offset
-                );
-            if (pageData != null && !pageData.isEmpty())
-              processMagneticFieldBaselineDrawingModes(
-                  (List<MagneticFieldBaselineExportData>) pageData,
-                  sessionCache
-              );
-            // specificColumnHeaders = Constants.MAGNETIC_FIELD_BASELINE_COLUMN_HEADERS; // Moved
-            // specificWriter = (outputStream, dataList) ->
-            // writeMagneticFieldBaselineDataToStream(outputStream,
-            // (List<MagneticFieldBaselineExportData>) dataList); // Removed
-            break;
-          case 5: // Accelerometer
-            pageData = db
-                .accelerometerDataDao()
-                .getPaginatedAccelerometerDataWithUsersAndImagesByUserId(
-                    context.userId,
-                    EXPORT_PAGE_SIZE,
-                    offset
-                );
-            if (pageData != null && !pageData.isEmpty())
-              processAccelerometerDrawingModes(
-                  (List<AccelerometerExportData>) pageData,
-                  sessionCache
-              );
-            // specificColumnHeaders = Constants.ACCELEROMETER_COLUMN_HEADERS; // Moved
-            // specificWriter = (outputStream, dataList) -> writeAccelerometerDataToStream
-            // (outputStream, (List<AccelerometerExportData>) dataList); // Removed
-            break;
-          default:
-            throw new IllegalArgumentException("Invalid data type index: " + index);
-        }
+        List<? extends ExportableData> pageData = fetchSensorDataPage(
+            context.userId,
+            index,
+            offset,
+            sessionCache
+        );
 
         if (pageData != null && !pageData.isEmpty()) {
-          Map<String, List<? extends ExportableData>> dataByModeOnPage
-              = (Map<String, List<? extends ExportableData>>) (Map<?, ?>) groupDataByMode(
+          overallSuccess &= processSensorDataPage(
+              context,
+              dataPrefix,
+              index,
               pageData,
-              ExportableData::getDrawingMode
+              openStreams,
+              filesWithHeaders
           );
-
-          for (Map.Entry<String, List<? extends ExportableData>> modeEntry :
-              dataByModeOnPage.entrySet()) {
-            String mode = modeEntry.getKey();
-            List<? extends ExportableData> modeDataOnPage = modeEntry.getValue();
-            File modeDir = createModeDirectory(context.userDir, mode);
-            if (modeDir == null) {
-              overallSuccess = false;
-              continue;
-            }
-
-            Map<String, List<? extends ExportableData>> dataByImageOnPage
-                = (Map<String, List<? extends ExportableData>>) (Map<?, ?>) groupSensorDataByImage(
-                modeDataOnPage);
-
-            for (Map.Entry<String, List<? extends ExportableData>> imageEntry :
-                dataByImageOnPage.entrySet()) {
-              String imageName = imageEntry.getKey();
-              List<? extends ExportableData> imageDataOnPage = imageEntry.getValue();
-
-              String formattedImageName = imageName.toLowerCase().replace(" ", "_");
-              String formattedDataType = formatDataTypeForFilename(dataPrefix);
-              String fileName = formattedImageName + "_" + formattedDataType + ".csv";
-              File csvFile = new File(modeDir, fileName);
-
-              try {
-                OutputStream outputStream = openStreams.get(csvFile);
-                if (outputStream == null) {
-                  OutputStream rawOutputStream
-                      = context.contentResolver.openOutputStream(Uri.fromFile(csvFile));
-                  if (rawOutputStream != null) {
-                    outputStream = new BufferedOutputStream(rawOutputStream, BUFFERED_STREAM_SIZE);
-                    openStreams.put(csvFile, outputStream);
-                  } else {
-                    showExportMessage("Failed to open stream for: " + csvFile.getName());
-                    overallSuccess = false;
-                    continue;
-                  }
-                }
-
-                if (!filesWithHeaders.contains(csvFile)) {
-                  String currentHeaders = "";
-                  switch (index) {
-                    case 1:
-                      currentHeaders = Constants.GRAVITY_COLUMN_HEADERS;
-                      break;
-                    case 2:
-                      currentHeaders = Constants.GYROSCOPE_COLUMN_HEADERS;
-                      break;
-                    case 3:
-                      currentHeaders = Constants.MAGNETIC_FIELD_COLUMN_HEADERS;
-                      break;
-                    case 4:
-                      currentHeaders = Constants.MAGNETIC_FIELD_BASELINE_COLUMN_HEADERS;
-                      break;
-                    case 5:
-                      currentHeaders = Constants.ACCELEROMETER_COLUMN_HEADERS;
-                      break;
-                  }
-                  if (!currentHeaders.isEmpty()) {
-                    outputStream.write(currentHeaders.getBytes());
-                  }
-                  filesWithHeaders.add(csvFile);
-                }
-
-                // Call specific write method
-                switch (index) {
-                  case 1:
-                    writeGravityDataToStream(
-                        outputStream,
-                        (List<GravityExportData>) imageDataOnPage
-                    );
-                    break;
-                  case 2:
-                    writeGyroscopeDataToStream(
-                        outputStream,
-                        (List<GyroscopeExportData>) imageDataOnPage
-                    );
-                    break;
-                  case 3:
-                    writeMagneticFieldDataToStream(
-                        outputStream,
-                        (List<MagneticFieldExportData>) imageDataOnPage
-                    );
-                    break;
-                  case 4:
-                    writeMagneticFieldBaselineDataToStream(
-                        outputStream,
-                        (List<MagneticFieldBaselineExportData>) imageDataOnPage
-                    );
-                    break;
-                  case 5:
-                    writeAccelerometerDataToStream(
-                        outputStream,
-                        (List<AccelerometerExportData>) imageDataOnPage
-                    );
-                    break;
-                }
-
-              } catch (IOException e) {
-                showExportMessage("Error writing " + dataPrefix + " to: " + csvFile.getName());
-                overallSuccess = false;
-              }
-            }
-          }
           offset += pageData.size();
           hasMoreData = pageData.size() == EXPORT_PAGE_SIZE;
         } else {
@@ -1461,21 +1291,240 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       );
       overallSuccess = false;
     } finally {
-      for (OutputStream stream : openStreams.values()) {
-        try {
-          stream.close();
-        } catch (IOException e) {
-          android.util.Log.e("ExportSensorData", "Error closing stream for " + dataType, e);
-        }
-      }
-      context.exportResults.put(dataType, overallSuccess);
-      context.dataTypeLatch.countDown();
-      context.progressUpdater.accept(dataType, overallSuccess);
+      closeAndFinalizeExport(context, dataType, openStreams, overallSuccess);
     }
   }
 
-  private Map<String, List<GyroscopeExportData>> groupGyroscopeDataByDrawingMode(List<GyroscopeExportData> gyroscopeDataList) {
-    return groupDataByMode(gyroscopeDataList, GyroscopeExportData::getDrawingMode);
+  private List<? extends ExportableData> fetchSensorDataPage(
+      long userId,
+      int index,
+      int offset,
+      Map<String, UserProgressManager.Session> sessionCache
+  ) {
+    List<? extends ExportableData> pageData;
+    switch (index) {
+      case 1: // Gravity
+        pageData = db
+            .gravityDataDao()
+            .getPaginatedGravityDataWithUsersAndImagesByUserId(userId, EXPORT_PAGE_SIZE, offset);
+        break;
+      case 2: // Gyroscope
+        pageData = db
+            .gyroscopeDataDao()
+            .getPaginatedGyroscopeDataWithUsersAndImagesByUserId(userId, EXPORT_PAGE_SIZE, offset);
+        break;
+      case 3: // Magnetic Field
+        pageData = db
+            .magneticFieldDataDao()
+            .getPaginatedMagneticFieldDataWithUsersAndImagesByUserId(
+                userId,
+                EXPORT_PAGE_SIZE,
+                offset
+            );
+        break;
+      case 4: // Magnetic Baseline
+        pageData = db
+            .magneticFieldBaselineDataDao()
+            .getPaginatedBaselineDataWithUsersAndImagesByUserId(userId, EXPORT_PAGE_SIZE, offset);
+        break;
+      case 5: // Accelerometer
+        pageData = db
+            .accelerometerDataDao()
+            .getPaginatedAccelerometerDataWithUsersAndImagesByUserId(
+                userId,
+                EXPORT_PAGE_SIZE,
+                offset
+            );
+        break;
+      default:
+        throw new IllegalArgumentException("Invalid data type index for page loading: " + index);
+    }
+    // Process modes after fetching, if data is available
+    if (pageData != null && !pageData.isEmpty()) {
+      processFetchedSensorDataModes(index, pageData, sessionCache);
+    }
+    return pageData;
+  }
+
+  // New helper to process drawing modes for fetched sensor data page
+  @SuppressWarnings("unchecked") // Suppress for casting to specific lists
+  private void processFetchedSensorDataModes(
+      int index,
+      List<? extends ExportableData> pageData,
+      Map<String, UserProgressManager.Session> sessionCache
+  ) {
+    switch (index) {
+      case 1:
+        processGravityDrawingModes((List<GravityExportData>) pageData, sessionCache);
+        break;
+      case 2:
+        processGyroscopeDrawingModes((List<GyroscopeExportData>) pageData, sessionCache);
+        break;
+      case 3:
+        processMagneticFieldDrawingModes((List<MagneticFieldExportData>) pageData, sessionCache);
+        break;
+      case 4:
+        processMagneticFieldBaselineDrawingModes(
+            (List<MagneticFieldBaselineExportData>) pageData,
+            sessionCache
+        );
+        break;
+      case 5:
+        processAccelerometerDrawingModes((List<AccelerometerExportData>) pageData, sessionCache);
+        break;
+      default:
+        // This case should ideally not be reached if called correctly
+        throw new IllegalStateException("Unexpected index in processFetchedSensorDataModes: "
+                                        + index);
+    }
+  }
+
+  private boolean processSensorDataPage(
+      ExportTaskContext context,
+      String dataPrefix,
+      int index,
+      List<? extends ExportableData> pageData,
+      Map<File, OutputStream> openStreams,
+      Set<File> filesWithHeaders
+  ) {
+    boolean pageSuccess = true;
+    Map<String, List<? extends ExportableData>> dataByModeOnPage
+        = (Map<String, List<? extends ExportableData>>) (Map<?, ?>) groupDataByMode(
+        pageData,
+        ExportableData::getDrawingMode
+    );
+
+    for (Map.Entry<String, List<? extends ExportableData>> modeEntry :
+        dataByModeOnPage.entrySet()) {
+      String mode = modeEntry.getKey();
+      List<? extends ExportableData> modeDataOnPage = modeEntry.getValue();
+      File modeDir = createModeDirectory(context.userDir, mode);
+      if (modeDir == null) {
+        pageSuccess = false;
+        continue;
+      }
+
+      Map<String, List<? extends ExportableData>> dataByImageOnPage
+          = (Map<String, List<? extends ExportableData>>) (Map<?, ?>) groupSensorDataByImage(
+          modeDataOnPage);
+
+      for (Map.Entry<String, List<? extends ExportableData>> imageEntry :
+          dataByImageOnPage.entrySet()) {
+        String imageName = imageEntry.getKey();
+        List<? extends ExportableData> imageDataOnPage = imageEntry.getValue();
+        SensorImageFileTarget target = new SensorImageFileTarget(
+            modeDir,
+                                                                 imageName,
+                                                                 dataPrefix,
+                                                                 index
+        );
+        pageSuccess &= writeSensorDataForImage(
+            context,
+            target,
+            imageDataOnPage,
+            openStreams,
+            filesWithHeaders
+        );
+      }
+    }
+    return pageSuccess;
+  }
+
+  private boolean writeSensorDataForImage(
+      ExportTaskContext context,
+      SensorImageFileTarget target,
+      List<? extends ExportableData> imageDataOnPage,
+      Map<File, OutputStream> openStreams,
+      Set<File> filesWithHeaders
+  ) {
+    String formattedImageName = target.imageName.toLowerCase().replace(" ", "_");
+    String formattedDataType = formatDataTypeForFilename(target.dataPrefix);
+    String fileName = formattedImageName + "_" + formattedDataType + ".csv";
+    File csvFile = new File(target.modeDir, fileName);
+    boolean success = true;
+
+    try {
+      OutputStream outputStream = openStreams.get(csvFile);
+      if (outputStream == null) {
+        OutputStream rawOutputStream
+            = context.contentResolver.openOutputStream(Uri.fromFile(csvFile));
+        if (rawOutputStream != null) {
+          outputStream = new BufferedOutputStream(rawOutputStream, BUFFERED_STREAM_SIZE);
+          openStreams.put(csvFile, outputStream);
+        } else {
+          showExportMessage("Failed to open stream for: " + csvFile.getName());
+          return false;
+        }
+      }
+
+      if (!filesWithHeaders.contains(csvFile)) {
+        String currentHeaders = getSensorColumnHeaders(target.index);
+        if (!currentHeaders.isEmpty()) {
+          outputStream.write(currentHeaders.getBytes(StandardCharsets.UTF_8));
+        }
+        filesWithHeaders.add(csvFile);
+      }
+
+      writeSpecificSensorDataToStream(outputStream, target.index, imageDataOnPage);
+
+    } catch (IOException e) {
+      showExportMessage("Error writing " + target.dataPrefix + " to: " + csvFile.getName());
+      success = false;
+    }
+    return success;
+  }
+
+  private String getSensorColumnHeaders(int index) {
+    switch (index) {
+      case 1:
+        return Constants.GRAVITY_COLUMN_HEADERS;
+      case 2:
+        return Constants.GYROSCOPE_COLUMN_HEADERS;
+      case 3:
+        return Constants.MAGNETIC_FIELD_COLUMN_HEADERS;
+      case 4:
+        return Constants.MAGNETIC_FIELD_BASELINE_COLUMN_HEADERS;
+      case 5:
+        return Constants.ACCELEROMETER_COLUMN_HEADERS;
+      default:
+        throw new IllegalArgumentException("Invalid data type index for headers: " + index);
+    }
+  }
+
+  private void writeSpecificSensorDataToStream(
+      OutputStream outputStream,
+      int index,
+      List<? extends ExportableData> imageDataOnPage
+  )
+  throws IOException {
+    switch (index) {
+      case 1:
+        writeGravityDataToStream(outputStream, (List<GravityExportData>) imageDataOnPage);
+        break;
+      case 2:
+        writeGyroscopeDataToStream(outputStream, (List<GyroscopeExportData>) imageDataOnPage);
+        break;
+      case 3:
+        writeMagneticFieldDataToStream(
+            outputStream,
+            (List<MagneticFieldExportData>) imageDataOnPage
+        );
+        break;
+      case 4:
+        writeMagneticFieldBaselineDataToStream(
+            outputStream,
+            (List<MagneticFieldBaselineExportData>) imageDataOnPage
+        );
+        break;
+      case 5:
+        writeAccelerometerDataToStream(
+            outputStream,
+            (List<AccelerometerExportData>) imageDataOnPage
+        );
+        break;
+      default:
+        throw new IllegalArgumentException("Invalid data type index for writing: " + index);
+    }
   }
 
   private <T> Map<String, List<T>> groupSensorDataByImage(List<T> data) {
@@ -1624,23 +1673,6 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     }
   }
 
-  private Map<String, List<MagneticFieldExportData>> groupMagneticFieldDataByDrawingMode(List<MagneticFieldExportData> magneticFieldDataList) {
-    return groupDataByMode(magneticFieldDataList, MagneticFieldExportData::getDrawingMode);
-  }
-
-  private Map<String, List<MagneticFieldBaselineExportData>> groupMagneticFieldBaselineDataByDrawingMode(
-      List<MagneticFieldBaselineExportData> magneticFieldBaselineDataList
-  ) {
-    return groupDataByMode(
-        magneticFieldBaselineDataList,
-        MagneticFieldBaselineExportData::getDrawingMode
-    );
-  }
-
-  private Map<String, List<AccelerometerExportData>> groupAccelerometerDataByDrawingMode(List<AccelerometerExportData> accelerometerDataList) {
-    return groupDataByMode(accelerometerDataList, AccelerometerExportData::getDrawingMode);
-  }
-
   private void setupSelectImagePreference() {
     if (selectImagePreference != null) {
       ActivityResultLauncher<Intent> imageSelectionLauncher = registerForActivityResult(
@@ -1780,12 +1812,6 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     }
   }
 
-  @FunctionalInterface
-  private interface SensorDataWriter<T> {
-    void writeData(OutputStream outputStream, List<T> data)
-    throws IOException;
-  }
-
   private static class ExportTaskContext {
     final long userId;
     final File userDir;
@@ -1835,6 +1861,21 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       this.currentItemAttempt = currentItemAttempt;
       this.overallAttempt = overallAttempt;
       this.totalAttempts = totalAttempts;
+    }
+  }
+
+  // Helper class to group parameters for writing sensor data for an image
+  private static class SensorImageFileTarget {
+    final File modeDir;
+    final String imageName;
+    final String dataPrefix;
+    final int index;
+
+    SensorImageFileTarget(File modeDir, String imageName, String dataPrefix, int index) {
+      this.modeDir = modeDir;
+      this.imageName = imageName;
+      this.dataPrefix = dataPrefix;
+      this.index = index;
     }
   }
 }

@@ -338,10 +338,10 @@ public class ImageOrderAdapter extends RecyclerView.Adapter<ImageOrderAdapter.Im
   }
 
   public static class ImageViewHolder extends RecyclerView.ViewHolder {
-    ImageView imageView;
-    TextView imageName;
-    View dragHandle;
-    ImageButton btnUnselect;
+    final ImageView imageView;
+    final TextView imageName;
+    final View dragHandle;
+    final ImageButton btnUnselect;
 
     ImageViewHolder(@NonNull View itemView) {
       super(itemView);
