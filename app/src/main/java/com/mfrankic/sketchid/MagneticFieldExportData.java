@@ -7,7 +7,7 @@ package com.mfrankic.sketchid;
  * It includes all fields from {@link MagneticFieldData} along with user name, image name, and
  * drawing mode.
  */
-public class MagneticFieldExportData {
+public class MagneticFieldExportData implements ExportableData {
   /**
    * The unique identifier of the magnetic field data record.
    */
@@ -215,6 +215,7 @@ public class MagneticFieldExportData {
    * @return The drawing mode active when this data was recorded.
    * Defaults to {@link Constants#DRAWING_MODE_NORMAL} if not explicitly set.
    */
+  @Override
   public String getDrawingMode() {
     return drawingMode != null ? drawingMode : Constants.DRAWING_MODE_NORMAL;
   }

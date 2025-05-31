@@ -3,6 +3,7 @@ package com.mfrankic.sketchid;
 import androidx.room.Dao;
 import androidx.room.Insert;
 import androidx.room.Query;
+import androidx.room.RoomWarnings;
 
 import java.util.List;
 
@@ -29,6 +30,7 @@ public interface MagneticFieldBaselineDataDao {
    * @param userId The ID of the user for whom to retrieve baseline data.
    * @return A list of {@link MagneticFieldBaselineExportData} objects.
    */
+  @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
   @Query(
       "SELECT mfbd.*, u.name as user_name, i.name as image_name "
       + "FROM magnetic_field_baseline_data mfbd "
@@ -39,6 +41,7 @@ public interface MagneticFieldBaselineDataDao {
   )
   List<MagneticFieldBaselineExportData> getBaselineDataWithUsersAndImagesByUserId(long userId);
 
+  @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
   @Query(
       "SELECT mfbd.*, u.name as user_name, i.name as image_name "
       + "FROM magnetic_field_baseline_data mfbd "

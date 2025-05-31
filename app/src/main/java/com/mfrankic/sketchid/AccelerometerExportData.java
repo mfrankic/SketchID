@@ -1,6 +1,6 @@
 package com.mfrankic.sketchid;
 
-public class AccelerometerExportData {
+public class AccelerometerExportData implements ExportableData {
   private int id;
   private int userId;
   private String userName;
@@ -102,6 +102,7 @@ public class AccelerometerExportData {
     this.z = z;
   }
 
+  @Override
   public String getDrawingMode() {
     return drawingMode != null ? drawingMode : Constants.DRAWING_MODE_NORMAL;
   }

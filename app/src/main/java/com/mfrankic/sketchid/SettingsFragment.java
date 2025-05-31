@@ -32,13 +32,16 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceManager;
 
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -595,8 +598,10 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
   private void launchDrawingDataExport(ExportTaskContext context, String dataType) {
     boolean overallSuccess = true;
+    Map<File, OutputStream> openStreams = new HashMap<>();
+    Set<File> filesWithHeaders = new HashSet<>();
+
     try {
-      List<DrawingExportData> allDataForUser = new ArrayList<>();
       int offset = 0;
       boolean hasMoreData;
 
@@ -610,7 +615,85 @@ public class SettingsFragment extends PreferenceFragmentCompat {
             );
 
         if (pageData != null && !pageData.isEmpty()) {
-          allDataForUser.addAll(pageData);
+          processDrawingModes(pageData, context.sessionCache);
+          // Use specific types for DrawingExportData
+          Map<String, List<DrawingExportData>> dataByModeOnPage = groupDataByDrawingMode(pageData);
+
+          for (Map.Entry<String, List<DrawingExportData>> modeEntry : dataByModeOnPage.entrySet()) {
+            String mode = modeEntry.getKey();
+            List<DrawingExportData> modeDataOnPage = modeEntry.getValue();
+            File modeDir = createModeDirectory(context.userDir, mode);
+            if (modeDir == null) {
+              overallSuccess = false;
+              continue; // Skip this mode if directory creation fails
+            }
+
+            Map<String, List<DrawingExportData>> dataByImageOnPage = groupDrawingDataByImage(
+                modeDataOnPage);
+            for (Map.Entry<String, List<DrawingExportData>> imageEntry :
+                dataByImageOnPage.entrySet()) {
+              String imageName = imageEntry.getKey();
+              List<DrawingExportData> imageDataOnPage = imageEntry.getValue();
+
+              String formattedImageName = imageName.toLowerCase().replace(" ", "_");
+              String formattedDataType = formatDataTypeForFilename(Constants.DRAWING_DATA_PREFIX);
+              String fileName = formattedImageName + "_" + formattedDataType + ".csv";
+              File csvFile = new File(modeDir, fileName);
+
+              try {
+                OutputStream outputStream = openStreams.get(csvFile);
+                if (outputStream == null) {
+                  OutputStream rawOutputStream
+                      = context.contentResolver.openOutputStream(Uri.fromFile(csvFile));
+                  if (rawOutputStream != null) {
+                    outputStream = new BufferedOutputStream(rawOutputStream);
+                    openStreams.put(csvFile, outputStream);
+                  } else {
+                    showExportMessage("Failed to open stream for: " + csvFile.getName());
+                    overallSuccess = false;
+                    continue;
+                  }
+                }
+
+                if (!filesWithHeaders.contains(csvFile)) {
+                  String currentHeaders = "";
+                  switch (dataType) {
+                    case "Drawing":
+                      currentHeaders = Constants.COLUMN_HEADERS;
+                      break;
+                    case "Gravity":
+                      currentHeaders = Constants.GRAVITY_COLUMN_HEADERS;
+                      break;
+                    case "Gyroscope":
+                      currentHeaders = Constants.GYROSCOPE_COLUMN_HEADERS;
+                      break;
+                    case "Magnetic Field":
+                      currentHeaders = Constants.MAGNETIC_FIELD_COLUMN_HEADERS;
+                      break;
+                    case "Magnetic Baseline":
+                      currentHeaders = Constants.MAGNETIC_FIELD_BASELINE_COLUMN_HEADERS;
+                      break;
+                    case "Accelerometer":
+                      currentHeaders = Constants.ACCELEROMETER_COLUMN_HEADERS;
+                      break;
+                  }
+                  if (!currentHeaders.isEmpty()) {
+                    outputStream.write(currentHeaders.getBytes());
+                  }
+                  filesWithHeaders.add(csvFile);
+                }
+
+                // Call specific write method - for DrawingData, it's always
+                // writeDrawingDataToStream
+                // The switch (dataType) here was incorrect as dataType is always "Drawing"
+                writeDrawingDataToStream(outputStream, imageDataOnPage);
+
+              } catch (IOException e) {
+                showExportMessage("Error writing " + dataType + " to: " + csvFile.getName());
+                overallSuccess = false;
+              }
+            }
+          }
           offset += pageData.size();
           hasMoreData = pageData.size() == EXPORT_PAGE_SIZE;
         } else {
@@ -618,232 +701,50 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         }
       } while (hasMoreData);
 
-      if (!allDataForUser.isEmpty()) {
-        processDrawingModes(allDataForUser, context.sessionCache);
-        Map<String, List<DrawingExportData>> dataByMode = groupDataByDrawingMode(allDataForUser);
-        overallSuccess = exportDataByModeAndImage(
-            dataByMode,
-            context.userDir,
-            context.contentResolver
-        );
-      }
     } catch (Exception e) {
       android.util.Log.e("ExportDrawingData", "Error exporting drawing data", e);
       overallSuccess = false;
     } finally {
+      for (OutputStream stream : openStreams.values()) {
+        try {
+          stream.close();
+        } catch (IOException e) {
+          android.util.Log.e("ExportDrawingData", "Error closing stream", e);
+        }
+      }
       context.exportResults.put(dataType, overallSuccess);
       context.dataTypeLatch.countDown();
       context.progressUpdater.accept(dataType, overallSuccess);
     }
   }
 
-  private void launchSensorDataExport(
-      ExportTaskContext context,
-      String[] dataTypes,
-      String[] dataPrefixes,
-      int index
-  ) {
-    boolean success = false;
-    String dataType = dataTypes[index];
-    Map<String, UserProgressManager.Session> sessionCache = context.sessionCache;
-    try {
-      List<?> fullSensorDataList; // Use a generic list to hold data from different DAOs
-      switch (index) {
-        case 1: // Gravity
-          List<GravityExportData> allGravityData = new ArrayList<>();
-          int gravityOffset = 0;
-          boolean hasMoreGravity;
-          do {
-            List<GravityExportData> pageData = db
-                .gravityDataDao()
-                .getPaginatedGravityDataWithUsersAndImagesByUserId(
-                    context.userId,
-                    EXPORT_PAGE_SIZE,
-                    gravityOffset
-                );
-            if (pageData != null && !pageData.isEmpty()) {
-              allGravityData.addAll(pageData);
-              gravityOffset += pageData.size();
-              hasMoreGravity = pageData.size() == EXPORT_PAGE_SIZE;
-            } else {
-              hasMoreGravity = false;
-            }
-          } while (hasMoreGravity);
-          fullSensorDataList = allGravityData;
-          if (!allGravityData.isEmpty()) {
-            processGravityDrawingModes(allGravityData, sessionCache);
-            Map<String, List<GravityExportData>> gravityDataByMode = groupGravityDataByDrawingMode(
-                allGravityData);
-            success = exportSensorDataByModeAndImage(
-                gravityDataByMode,
-                context.userDir,
-                context.contentResolver,
-                dataPrefixes[index],
-                this::writeGravityDataToStream
-            );
-          } else {
-            success = true;
-          } // No data is not an error
-          break;
-        case 2: // Gyroscope
-          List<GyroscopeExportData> allGyroData = new ArrayList<>();
-          int gyroOffset = 0;
-          boolean hasMoreGyro;
-          do {
-            List<GyroscopeExportData> pageData = db
-                .gyroscopeDataDao()
-                .getPaginatedGyroscopeDataWithUsersAndImagesByUserId(
-                    context.userId,
-                    EXPORT_PAGE_SIZE,
-                    gyroOffset
-                );
-            if (pageData != null && !pageData.isEmpty()) {
-              allGyroData.addAll(pageData);
-              gyroOffset += pageData.size();
-              hasMoreGyro = pageData.size() == EXPORT_PAGE_SIZE;
-            } else {
-              hasMoreGyro = false;
-            }
-          } while (hasMoreGyro);
-          fullSensorDataList = allGyroData;
-          if (!allGyroData.isEmpty()) {
-            processGyroscopeDrawingModes(allGyroData, sessionCache);
-            Map<String, List<GyroscopeExportData>> gyroscopeDataByMode
-                = groupGyroscopeDataByDrawingMode(allGyroData);
-            success = exportSensorDataByModeAndImage(
-                gyroscopeDataByMode,
-                context.userDir,
-                context.contentResolver,
-                dataPrefixes[index],
-                this::writeGyroscopeDataToStream
-            );
-          } else {
-            success = true;
-          }
-          break;
-        case 3: // Magnetic Field
-          List<MagneticFieldExportData> allMagData = new ArrayList<>();
-          int magOffset = 0;
-          boolean hasMoreMag;
-          do {
-            List<MagneticFieldExportData> pageData = db
-                .magneticFieldDataDao()
-                .getPaginatedMagneticFieldDataWithUsersAndImagesByUserId(
-                    context.userId,
-                    EXPORT_PAGE_SIZE,
-                    magOffset
-                );
-            if (pageData != null && !pageData.isEmpty()) {
-              allMagData.addAll(pageData);
-              magOffset += pageData.size();
-              hasMoreMag = pageData.size() == EXPORT_PAGE_SIZE;
-            } else {
-              hasMoreMag = false;
-            }
-          } while (hasMoreMag);
-          fullSensorDataList = allMagData;
-          if (!allMagData.isEmpty()) {
-            processMagneticFieldDrawingModes(allMagData, sessionCache);
-            Map<String, List<MagneticFieldExportData>> magneticFieldDataByMode
-                = groupMagneticFieldDataByDrawingMode(allMagData);
-            success = exportSensorDataByModeAndImage(
-                magneticFieldDataByMode,
-                context.userDir,
-                context.contentResolver,
-                dataPrefixes[index],
-                this::writeMagneticFieldDataToStream
-            );
-          } else {
-            success = true;
-          }
-          break;
-        case 4: // Magnetic Baseline
-          List<MagneticFieldBaselineExportData> allMagBaselineData = new ArrayList<>();
-          int magBaselineOffset = 0;
-          boolean hasMoreMagBaseline;
-          do {
-            List<MagneticFieldBaselineExportData> pageData = db
-                .magneticFieldBaselineDataDao()
-                .getPaginatedBaselineDataWithUsersAndImagesByUserId(
-                    context.userId,
-                    EXPORT_PAGE_SIZE,
-                    magBaselineOffset
-                );
-            if (pageData != null && !pageData.isEmpty()) {
-              allMagBaselineData.addAll(pageData);
-              magBaselineOffset += pageData.size();
-              hasMoreMagBaseline = pageData.size() == EXPORT_PAGE_SIZE;
-            } else {
-              hasMoreMagBaseline = false;
-            }
-          } while (hasMoreMagBaseline);
-          fullSensorDataList = allMagBaselineData;
-          if (!allMagBaselineData.isEmpty()) {
-            processMagneticFieldBaselineDrawingModes(allMagBaselineData, sessionCache);
-            Map<String, List<MagneticFieldBaselineExportData>> magneticBaselineDataByMode
-                = groupMagneticFieldBaselineDataByDrawingMode(allMagBaselineData);
-            success = exportSensorDataByModeAndImage(
-                magneticBaselineDataByMode,
-                context.userDir,
-                context.contentResolver,
-                dataPrefixes[index],
-                this::writeMagneticFieldBaselineDataToStream
-            );
-          } else {
-            success = true;
-          }
-          break;
-        case 5: // Accelerometer
-          List<AccelerometerExportData> allAccelData = new ArrayList<>();
-          int accelOffset = 0;
-          boolean hasMoreAccel;
-          do {
-            List<AccelerometerExportData> pageData = db
-                .accelerometerDataDao()
-                .getPaginatedAccelerometerDataWithUsersAndImagesByUserId(
-                    context.userId,
-                    EXPORT_PAGE_SIZE,
-                    accelOffset
-                );
-            if (pageData != null && !pageData.isEmpty()) {
-              allAccelData.addAll(pageData);
-              accelOffset += pageData.size();
-              hasMoreAccel = pageData.size() == EXPORT_PAGE_SIZE;
-            } else {
-              hasMoreAccel = false;
-            }
-          } while (hasMoreAccel);
-          fullSensorDataList = allAccelData;
-          if (!allAccelData.isEmpty()) {
-            processAccelerometerDrawingModes(allAccelData, sessionCache);
-            Map<String, List<AccelerometerExportData>> accelerometerDataByMode
-                = groupAccelerometerDataByDrawingMode(allAccelData);
-            success = exportSensorDataByModeAndImage(
-                accelerometerDataByMode,
-                context.userDir,
-                context.contentResolver,
-                dataPrefixes[index],
-                this::writeAccelerometerDataToStream
-            );
-          } else {
-            success = true;
-          }
-          break;
-        default:
-          throw new IllegalArgumentException("Invalid data type index: " + index);
-      }
-      context.exportResults.put(dataType, success);
-    } catch (Exception e) {
-      android.util.Log.e(
-          "ExportSensorData",
-          "Error exporting " + dataType + PROGRESS_ITEM_SUFFIX,
-          e
-      );
-      context.exportResults.put(dataType, false);
-      success = false;
-    } finally {
-      context.dataTypeLatch.countDown();
-      context.progressUpdater.accept(dataType, success);
+  private void writeDrawingDataToStream(OutputStream outputStream, List<DrawingExportData> modeData)
+  throws IOException {
+    StringBuilder sb = new StringBuilder();
+    for (DrawingExportData data : modeData) {
+      sb.setLength(0); // Clear StringBuilder for new row
+      sb.append(data.getId()).append(",");
+      sb.append(data.getUserID()).append(",");
+      sb.append("\"").append(data.getUserName().replace("\"", "\"\"")).append("\",");
+      sb.append(data.getAttempt()).append(",");
+      sb.append(data.getTime()).append(",");
+      sb.append(data.getX()).append(",");
+      sb.append(data.getY()).append(",");
+      sb.append("\"").append(data.getAction().replace("\"", "\"\"")).append("\",");
+      sb
+          .append("\"")
+          .append(data.getItemType() != null
+                  ? data.getItemType().toString().replace("\"", "\"\"")
+                  : "")
+          .append("\",");
+      sb.append(data.getImageID()).append(",");
+      sb.append("\"").append(data.getImageName().replace("\"", "\"\"")).append("\",");
+      sb.append("\"").append(data.getDrawingMode().replace("\"", "\"\"")).append("\",");
+      sb.append(data.getSize()).append(",");
+      sb.append(data.getPressure()).append(",");
+      sb.append(data.getOrientation());
+      sb.append("\n"); // Add newline
+      outputStream.write(sb.toString().getBytes(StandardCharsets.UTF_8));
     }
   }
 
@@ -1216,85 +1117,6 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     return groupDataByMode(drawingDataList, DrawingExportData::getDrawingMode);
   }
 
-  private <T> Map<String, List<T>> groupDataByMode(
-      List<T> dataList,
-      Function<T, String> modeGetter
-  ) {
-    Map<String, List<T>> dataByMode = new HashMap<>();
-    dataByMode.put(Constants.DRAWING_MODE_NORMAL, new ArrayList<>());
-    dataByMode.put(Constants.DRAWING_MODE_OVERLAY, new ArrayList<>());
-    for (T data : dataList) {
-      String mode = modeGetter.apply(data);
-      dataByMode.computeIfAbsent(mode, k -> new ArrayList<>()).add(data);
-    }
-    return dataByMode;
-  }
-
-  private boolean exportDataByModeAndImage(
-      Map<String, List<DrawingExportData>> dataByMode,
-      File userDir,
-      ContentResolver contentResolver
-  ) {
-    boolean allExported = true;
-    for (Map.Entry<String, List<DrawingExportData>> modeEntry : dataByMode.entrySet()) {
-      String mode = modeEntry.getKey();
-      List<DrawingExportData> modeData = modeEntry.getValue();
-      if (!modeData.isEmpty()) {
-        File modeDir = createModeDirectory(userDir, mode);
-        if (modeDir != null) {
-          boolean modeExported = exportDataForMode(modeData, modeDir, contentResolver);
-          allExported &= modeExported;
-        } else {
-          allExported = false;
-        }
-      }
-    }
-    return allExported;
-  }
-
-  private boolean exportDataForMode(
-      List<DrawingExportData> modeData,
-      File modeDir,
-      ContentResolver contentResolver
-  ) {
-    boolean allExported = true;
-    Map<String, List<DrawingExportData>> dataByImage = groupDrawingDataByImage(modeData);
-    for (Map.Entry<String, List<DrawingExportData>> imageEntry : dataByImage.entrySet()) {
-      String imageName = imageEntry.getKey();
-      List<DrawingExportData> imageData = imageEntry.getValue();
-      boolean imageExported = exportDataForImage(imageName, imageData, modeDir, contentResolver);
-      allExported &= imageExported;
-    }
-    return allExported;
-  }
-
-  private boolean exportDataForImage(
-      String imageName,
-      List<DrawingExportData> imageData,
-      File modeDir,
-      ContentResolver contentResolver
-  ) {
-    String formattedImageName = imageName.toLowerCase().replace(" ", "_");
-    String formattedDataType = formatDataTypeForFilename(Constants.DRAWING_DATA_PREFIX);
-    String fileName = formattedImageName + "_" + formattedDataType + ".csv";
-    File file = new File(modeDir, fileName);
-    Uri exportFileUri = Uri.fromFile(file);
-    try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
-      if (outputStream != null) {
-        writeDrawingDataToStream(outputStream, imageData);
-      }
-      return true;
-    } catch (IOException e) {
-      showExportMessage(String.format(
-          Locale.getDefault(),
-          "Failed to export %s data for image: %s",
-          Constants.DRAWING_DATA_PREFIX,
-          imageName
-      ));
-      return false;
-    }
-  }
-
   private void processGravityDrawingModes(
       List<GravityExportData> gravityDataList,
       Map<String, UserProgressManager.Session> sessionCache
@@ -1373,6 +1195,20 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     return groupDataByMode(gravityDataList, GravityExportData::getDrawingMode);
   }
 
+  private <T> Map<String, List<T>> groupDataByMode(
+      List<T> dataList,
+      Function<T, String> modeGetter
+  ) {
+    Map<String, List<T>> dataByMode = new HashMap<>();
+    dataByMode.put(Constants.DRAWING_MODE_NORMAL, new ArrayList<>());
+    dataByMode.put(Constants.DRAWING_MODE_OVERLAY, new ArrayList<>());
+    for (T data : dataList) {
+      String mode = modeGetter.apply(data);
+      dataByMode.computeIfAbsent(mode, k -> new ArrayList<>()).add(data);
+    }
+    return dataByMode;
+  }
+
   private Map<String, List<DrawingExportData>> groupDrawingDataByImage(List<DrawingExportData> data) {
     Map<String, List<DrawingExportData>> dataByImage = new HashMap<>();
     for (DrawingExportData item : data) {
@@ -1389,90 +1225,251 @@ public class SettingsFragment extends PreferenceFragmentCompat {
     return dataPrefix.replaceAll("_$|^_", "").toLowerCase();
   }
 
-  private void writeDrawingDataToStream(OutputStream outputStream, List<DrawingExportData> modeData)
-  throws IOException {
-    outputStream.write(Constants.COLUMN_HEADERS.getBytes());
-    for (DrawingExportData data : modeData) {
-      String row = String.format(
-          Locale.getDefault(),
-          Constants.FILE_EXPORT_PATTERN,
-          data.getId(),
-          data.getUserID(),
-          data.getUserName(),
-          data.getAttempt(),
-          data.getTime(),
-          data.getX(),
-          data.getY(),
-          data.getAction(),
-          data.getItemType(),
-          data.getImageID(),
-          data.getImageName(),
-          data.getDrawingMode(),
-          data.getSize(),
-          data.getPressure(),
-          data.getOrientation()
-      );
-      outputStream.write(row.getBytes());
-    }
-  }
-
-  private <T> boolean exportSensorDataByModeAndImage(
-      Map<String, List<T>> dataByMode,
-      File userDir,
-      ContentResolver contentResolver,
-      String dataPrefix,
-      SensorDataWriter<T> writer
+  private void launchSensorDataExport(
+      ExportTaskContext context,
+      String[] dataTypes,
+      String[] dataPrefixes,
+      int index
   ) {
-    boolean allExported = true;
-    for (Map.Entry<String, List<T>> modeEntry : dataByMode.entrySet()) {
-      String mode = modeEntry.getKey();
-      List<T> modeData = modeEntry.getValue();
-      if (!shouldSkipSensorModeData(modeData)) {
-        File modeDir = createModeDirectory(userDir, mode);
-        if (modeDir != null) {
-          boolean modeExported = exportSensorDataForMode(
-              modeData,
-              modeDir,
-              contentResolver,
-              dataPrefix,
-              writer
+    boolean overallSuccess = true;
+    String dataType = dataTypes[index];
+    String dataPrefix = dataPrefixes[index];
+    Map<String, UserProgressManager.Session> sessionCache = context.sessionCache;
+
+    Map<File, OutputStream> openStreams = new HashMap<>();
+    Set<File> filesWithHeaders = new HashSet<>();
+
+    try {
+      int offset = 0;
+      boolean hasMoreData;
+
+      do {
+        List<? extends ExportableData> pageData = null;
+        // String specificColumnHeaders = ""; // No longer needed here
+        // SensorDataWriter<?> specificWriter = null; // No longer needed
+
+        switch (index) {
+          case 1: // Gravity
+            pageData = db
+                .gravityDataDao()
+                .getPaginatedGravityDataWithUsersAndImagesByUserId(
+                    context.userId,
+                    EXPORT_PAGE_SIZE,
+                    offset
+                );
+            if (pageData != null && !pageData.isEmpty())
+              processGravityDrawingModes((List<GravityExportData>) pageData, sessionCache);
+            // specificColumnHeaders = Constants.GRAVITY_COLUMN_HEADERS; // Moved
+            // specificWriter = (outputStream, dataList) -> writeGravityDataToStream
+            // (outputStream, (List<GravityExportData>) dataList); // Removed
+            break;
+          case 2: // Gyroscope
+            pageData = db
+                .gyroscopeDataDao()
+                .getPaginatedGyroscopeDataWithUsersAndImagesByUserId(
+                    context.userId,
+                    EXPORT_PAGE_SIZE,
+                    offset
+                );
+            if (pageData != null && !pageData.isEmpty())
+              processGyroscopeDrawingModes((List<GyroscopeExportData>) pageData, sessionCache);
+            // specificColumnHeaders = Constants.GYROSCOPE_COLUMN_HEADERS; // Moved
+            // specificWriter = (outputStream, dataList) -> writeGyroscopeDataToStream
+            // (outputStream, (List<GyroscopeExportData>) dataList); // Removed
+            break;
+          case 3: // Magnetic Field
+            pageData = db
+                .magneticFieldDataDao()
+                .getPaginatedMagneticFieldDataWithUsersAndImagesByUserId(
+                    context.userId,
+                    EXPORT_PAGE_SIZE,
+                    offset
+                );
+            if (pageData != null && !pageData.isEmpty())
+              processMagneticFieldDrawingModes(
+                  (List<MagneticFieldExportData>) pageData,
+                  sessionCache
+              );
+            // specificColumnHeaders = Constants.MAGNETIC_FIELD_COLUMN_HEADERS; // Moved
+            // specificWriter = (outputStream, dataList) -> writeMagneticFieldDataToStream
+            // (outputStream, (List<MagneticFieldExportData>) dataList); // Removed
+            break;
+          case 4: // Magnetic Baseline
+            pageData = db
+                .magneticFieldBaselineDataDao()
+                .getPaginatedBaselineDataWithUsersAndImagesByUserId(
+                    context.userId,
+                    EXPORT_PAGE_SIZE,
+                    offset
+                );
+            if (pageData != null && !pageData.isEmpty())
+              processMagneticFieldBaselineDrawingModes(
+                  (List<MagneticFieldBaselineExportData>) pageData,
+                  sessionCache
+              );
+            // specificColumnHeaders = Constants.MAGNETIC_FIELD_BASELINE_COLUMN_HEADERS; // Moved
+            // specificWriter = (outputStream, dataList) ->
+            // writeMagneticFieldBaselineDataToStream(outputStream,
+            // (List<MagneticFieldBaselineExportData>) dataList); // Removed
+            break;
+          case 5: // Accelerometer
+            pageData = db
+                .accelerometerDataDao()
+                .getPaginatedAccelerometerDataWithUsersAndImagesByUserId(
+                    context.userId,
+                    EXPORT_PAGE_SIZE,
+                    offset
+                );
+            if (pageData != null && !pageData.isEmpty())
+              processAccelerometerDrawingModes(
+                  (List<AccelerometerExportData>) pageData,
+                  sessionCache
+              );
+            // specificColumnHeaders = Constants.ACCELEROMETER_COLUMN_HEADERS; // Moved
+            // specificWriter = (outputStream, dataList) -> writeAccelerometerDataToStream
+            // (outputStream, (List<AccelerometerExportData>) dataList); // Removed
+            break;
+          default:
+            throw new IllegalArgumentException("Invalid data type index: " + index);
+        }
+
+        if (pageData != null && !pageData.isEmpty()) {
+          Map<String, List<? extends ExportableData>> dataByModeOnPage
+              = (Map<String, List<? extends ExportableData>>) (Map<?, ?>) groupDataByMode(
+              pageData,
+              ExportableData::getDrawingMode
           );
-          allExported &= modeExported;
+
+          for (Map.Entry<String, List<? extends ExportableData>> modeEntry :
+              dataByModeOnPage.entrySet()) {
+            String mode = modeEntry.getKey();
+            List<? extends ExportableData> modeDataOnPage = modeEntry.getValue();
+            File modeDir = createModeDirectory(context.userDir, mode);
+            if (modeDir == null) {
+              overallSuccess = false;
+              continue;
+            }
+
+            Map<String, List<? extends ExportableData>> dataByImageOnPage
+                = (Map<String, List<? extends ExportableData>>) (Map<?, ?>) groupSensorDataByImage(
+                modeDataOnPage);
+
+            for (Map.Entry<String, List<? extends ExportableData>> imageEntry :
+                dataByImageOnPage.entrySet()) {
+              String imageName = imageEntry.getKey();
+              List<? extends ExportableData> imageDataOnPage = imageEntry.getValue();
+
+              String formattedImageName = imageName.toLowerCase().replace(" ", "_");
+              String formattedDataType = formatDataTypeForFilename(dataPrefix);
+              String fileName = formattedImageName + "_" + formattedDataType + ".csv";
+              File csvFile = new File(modeDir, fileName);
+
+              try {
+                OutputStream outputStream = openStreams.get(csvFile);
+                if (outputStream == null) {
+                  OutputStream rawOutputStream
+                      = context.contentResolver.openOutputStream(Uri.fromFile(csvFile));
+                  if (rawOutputStream != null) {
+                    outputStream = new BufferedOutputStream(rawOutputStream);
+                    openStreams.put(csvFile, outputStream);
+                  } else {
+                    showExportMessage("Failed to open stream for: " + csvFile.getName());
+                    overallSuccess = false;
+                    continue;
+                  }
+                }
+
+                if (!filesWithHeaders.contains(csvFile)) {
+                  String currentHeaders = "";
+                  switch (index) {
+                    case 1:
+                      currentHeaders = Constants.GRAVITY_COLUMN_HEADERS;
+                      break;
+                    case 2:
+                      currentHeaders = Constants.GYROSCOPE_COLUMN_HEADERS;
+                      break;
+                    case 3:
+                      currentHeaders = Constants.MAGNETIC_FIELD_COLUMN_HEADERS;
+                      break;
+                    case 4:
+                      currentHeaders = Constants.MAGNETIC_FIELD_BASELINE_COLUMN_HEADERS;
+                      break;
+                    case 5:
+                      currentHeaders = Constants.ACCELEROMETER_COLUMN_HEADERS;
+                      break;
+                  }
+                  if (!currentHeaders.isEmpty()) {
+                    outputStream.write(currentHeaders.getBytes());
+                  }
+                  filesWithHeaders.add(csvFile);
+                }
+
+                // Call specific write method
+                switch (index) {
+                  case 1:
+                    writeGravityDataToStream(
+                        outputStream,
+                        (List<GravityExportData>) imageDataOnPage
+                    );
+                    break;
+                  case 2:
+                    writeGyroscopeDataToStream(
+                        outputStream,
+                        (List<GyroscopeExportData>) imageDataOnPage
+                    );
+                    break;
+                  case 3:
+                    writeMagneticFieldDataToStream(
+                        outputStream,
+                        (List<MagneticFieldExportData>) imageDataOnPage
+                    );
+                    break;
+                  case 4:
+                    writeMagneticFieldBaselineDataToStream(
+                        outputStream,
+                        (List<MagneticFieldBaselineExportData>) imageDataOnPage
+                    );
+                    break;
+                  case 5:
+                    writeAccelerometerDataToStream(
+                        outputStream,
+                        (List<AccelerometerExportData>) imageDataOnPage
+                    );
+                    break;
+                }
+
+              } catch (IOException e) {
+                showExportMessage("Error writing " + dataPrefix + " to: " + csvFile.getName());
+                overallSuccess = false;
+              }
+            }
+          }
+          offset += pageData.size();
+          hasMoreData = pageData.size() == EXPORT_PAGE_SIZE;
         } else {
-          allExported = false;
+          hasMoreData = false;
+        }
+      } while (hasMoreData);
+
+    } catch (Exception e) {
+      android.util.Log.e(
+          "ExportSensorData",
+          "Error exporting " + dataType + PROGRESS_ITEM_SUFFIX,
+          e
+      );
+      overallSuccess = false;
+    } finally {
+      for (OutputStream stream : openStreams.values()) {
+        try {
+          stream.close();
+        } catch (IOException e) {
+          android.util.Log.e("ExportSensorData", "Error closing stream for " + dataType, e);
         }
       }
+      context.exportResults.put(dataType, overallSuccess);
+      context.dataTypeLatch.countDown();
+      context.progressUpdater.accept(dataType, overallSuccess);
     }
-    return allExported;
-  }
-
-  private <T> boolean shouldSkipSensorModeData(List<T> modeData) {
-    return modeData.isEmpty();
-  }
-
-  private <T> boolean exportSensorDataForMode(
-      List<T> modeData,
-      File modeDir,
-      ContentResolver contentResolver,
-      String dataPrefix,
-      SensorDataWriter<T> writer
-  ) {
-    boolean allExported = true;
-    Map<String, List<T>> dataByImage = groupSensorDataByImage(modeData);
-    for (Map.Entry<String, List<T>> imageEntry : dataByImage.entrySet()) {
-      String imageName = imageEntry.getKey();
-      List<T> imageData = imageEntry.getValue();
-      boolean imageExported = exportSensorDataForImage(
-          imageName,
-          imageData,
-          modeDir,
-          contentResolver,
-          dataPrefix,
-          writer
-      );
-      allExported &= imageExported;
-    }
-    return allExported;
   }
 
   private Map<String, List<GyroscopeExportData>> groupGyroscopeDataByDrawingMode(List<GyroscopeExportData> gyroscopeDataList) {
@@ -1508,47 +1505,43 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
   private void writeGravityDataToStream(OutputStream outputStream, List<GravityExportData> data)
   throws IOException {
-    outputStream.write(Constants.GRAVITY_COLUMN_HEADERS.getBytes());
+    StringBuilder sb = new StringBuilder();
     for (GravityExportData item : data) {
-      String row = String.format(
-          Locale.getDefault(),
-          Constants.GRAVITY_EXPORT_PATTERN,
-          item.getId(),
-          item.getUserId(),
-          item.getUserName(),
-          item.getImageId(),
-          item.getImageName(),
-          item.getAttempt(),
-          item.getTimestamp(),
-          item.getX(),
-          item.getY(),
-          item.getZ(),
-          item.getDrawingMode()
-      );
-      outputStream.write(row.getBytes());
+      sb.setLength(0);
+      sb.append(item.getId()).append(",");
+      sb.append(item.getUserId()).append(",");
+      sb.append("\"").append(item.getUserName().replace("\"", "\"\"")).append("\",");
+      sb.append(item.getImageId()).append(",");
+      sb.append("\"").append(item.getImageName().replace("\"", "\"\"")).append("\",");
+      sb.append(item.getAttempt()).append(",");
+      sb.append(item.getTimestamp()).append(",");
+      sb.append(item.getX()).append(",");
+      sb.append(item.getY()).append(",");
+      sb.append(item.getZ()).append(",");
+      sb.append("\"").append(item.getDrawingMode().replace("\"", "\"\"")).append("\"");
+      sb.append("\n");
+      outputStream.write(sb.toString().getBytes(StandardCharsets.UTF_8));
     }
   }
 
   private void writeGyroscopeDataToStream(OutputStream outputStream, List<GyroscopeExportData> data)
   throws IOException {
-    outputStream.write(Constants.GYROSCOPE_COLUMN_HEADERS.getBytes());
+    StringBuilder sb = new StringBuilder();
     for (GyroscopeExportData item : data) {
-      String row = String.format(
-          Locale.getDefault(),
-          Constants.GYROSCOPE_EXPORT_PATTERN,
-          item.getId(),
-          item.getUserId(),
-          item.getUserName(),
-          item.getImageId(),
-          item.getImageName(),
-          item.getAttempt(),
-          item.getTimestamp(),
-          item.getX(),
-          item.getY(),
-          item.getZ(),
-          item.getDrawingMode()
-      );
-      outputStream.write(row.getBytes());
+      sb.setLength(0);
+      sb.append(item.getId()).append(",");
+      sb.append(item.getUserId()).append(",");
+      sb.append("\"").append(item.getUserName().replace("\"", "\"\"")).append("\",");
+      sb.append(item.getImageId()).append(",");
+      sb.append("\"").append(item.getImageName().replace("\"", "\"\"")).append("\",");
+      sb.append(item.getAttempt()).append(",");
+      sb.append(item.getTimestamp()).append(",");
+      sb.append(item.getX()).append(",");
+      sb.append(item.getY()).append(",");
+      sb.append(item.getZ()).append(",");
+      sb.append("\"").append(item.getDrawingMode().replace("\"", "\"\"")).append("\"");
+      sb.append("\n");
+      outputStream.write(sb.toString().getBytes(StandardCharsets.UTF_8));
     }
   }
 
@@ -1557,24 +1550,22 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       List<MagneticFieldExportData> data
   )
   throws IOException {
-    outputStream.write(Constants.MAGNETIC_FIELD_COLUMN_HEADERS.getBytes());
+    StringBuilder sb = new StringBuilder();
     for (MagneticFieldExportData item : data) {
-      String row = String.format(
-          Locale.getDefault(),
-          Constants.MAGNETIC_FIELD_EXPORT_PATTERN,
-          item.getId(),
-          item.getUserId(),
-          item.getUserName(),
-          item.getImageId(),
-          item.getImageName(),
-          item.getAttempt(),
-          item.getTimestamp(),
-          item.getX(),
-          item.getY(),
-          item.getZ(),
-          item.getDrawingMode()
-      );
-      outputStream.write(row.getBytes());
+      sb.setLength(0);
+      sb.append(item.getId()).append(",");
+      sb.append(item.getUserId()).append(",");
+      sb.append("\"").append(item.getUserName().replace("\"", "\"\"")).append("\",");
+      sb.append(item.getImageId()).append(",");
+      sb.append("\"").append(item.getImageName().replace("\"", "\"\"")).append("\",");
+      sb.append(item.getAttempt()).append(",");
+      sb.append(item.getTimestamp()).append(",");
+      sb.append(item.getX()).append(",");
+      sb.append(item.getY()).append(",");
+      sb.append(item.getZ()).append(",");
+      sb.append("\"").append(item.getDrawingMode().replace("\"", "\"\"")).append("\"");
+      sb.append("\n");
+      outputStream.write(sb.toString().getBytes(StandardCharsets.UTF_8));
     }
   }
 
@@ -1583,29 +1574,27 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       List<MagneticFieldBaselineExportData> data
   )
   throws IOException {
-    outputStream.write(Constants.MAGNETIC_FIELD_BASELINE_COLUMN_HEADERS.getBytes());
+    StringBuilder sb = new StringBuilder();
     for (MagneticFieldBaselineExportData item : data) {
-      String row = String.format(
-          Locale.getDefault(),
-          Constants.MAGNETIC_FIELD_BASELINE_EXPORT_PATTERN,
-          item.getId(),
-          item.getUserId(),
-          item.getUserName(),
-          item.getImageId(),
-          item.getImageName(),
-          item.getAttempt(),
-          item.getTimestamp(),
-          item.getAvgX(),
-          item.getAvgY(),
-          item.getAvgZ(),
-          item.getDurationMs(),
-          item.getSampleCount(),
-          item.getStdDevX(),
-          item.getStdDevY(),
-          item.getStdDevZ(),
-          item.getDrawingMode()
-      );
-      outputStream.write(row.getBytes());
+      sb.setLength(0);
+      sb.append(item.getId()).append(",");
+      sb.append(item.getUserId()).append(",");
+      sb.append("\"").append(item.getUserName().replace("\"", "\"\"")).append("\",");
+      sb.append(item.getImageId()).append(",");
+      sb.append("\"").append(item.getImageName().replace("\"", "\"\"")).append("\",");
+      sb.append(item.getAttempt()).append(",");
+      sb.append(item.getTimestamp()).append(",");
+      sb.append(item.getAvgX()).append(",");
+      sb.append(item.getAvgY()).append(",");
+      sb.append(item.getAvgZ()).append(",");
+      sb.append(item.getDurationMs()).append(",");
+      sb.append(item.getSampleCount()).append(",");
+      sb.append(item.getStdDevX()).append(",");
+      sb.append(item.getStdDevY()).append(",");
+      sb.append(item.getStdDevZ()).append(",");
+      sb.append("\"").append(item.getDrawingMode().replace("\"", "\"\"")).append("\"");
+      sb.append("\n");
+      outputStream.write(sb.toString().getBytes(StandardCharsets.UTF_8));
     }
   }
 
@@ -1614,24 +1603,22 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       List<AccelerometerExportData> data
   )
   throws IOException {
-    outputStream.write(Constants.ACCELEROMETER_COLUMN_HEADERS.getBytes());
+    StringBuilder sb = new StringBuilder();
     for (AccelerometerExportData item : data) {
-      String row = String.format(
-          Locale.getDefault(),
-          Constants.ACCELEROMETER_EXPORT_PATTERN,
-          item.getId(),
-          item.getUserId(),
-          item.getUserName(),
-          item.getImageId(),
-          item.getImageName(),
-          item.getAttempt(),
-          item.getTimestamp(),
-          item.getX(),
-          item.getY(),
-          item.getZ(),
-          item.getDrawingMode()
-      );
-      outputStream.write(row.getBytes());
+      sb.setLength(0);
+      sb.append(item.getId()).append(",");
+      sb.append(item.getUserId()).append(",");
+      sb.append("\"").append(item.getUserName().replace("\"", "\"\"")).append("\",");
+      sb.append(item.getImageId()).append(",");
+      sb.append("\"").append(item.getImageName().replace("\"", "\"\"")).append("\",");
+      sb.append(item.getAttempt()).append(",");
+      sb.append(item.getTimestamp()).append(",");
+      sb.append(item.getX()).append(",");
+      sb.append(item.getY()).append(",");
+      sb.append(item.getZ()).append(",");
+      sb.append("\"").append(item.getDrawingMode().replace("\"", "\"\"")).append("\"");
+      sb.append("\n");
+      outputStream.write(sb.toString().getBytes(StandardCharsets.UTF_8));
     }
   }
 
@@ -1788,30 +1775,6 @@ public class SettingsFragment extends PreferenceFragmentCompat {
         }
         return true;
       });
-    }
-  }
-
-  private <T> boolean exportSensorDataForImage(
-      String imageName,
-      List<T> imageData,
-      File modeDir,
-      ContentResolver contentResolver,
-      String dataPrefix,
-      SensorDataWriter<T> writer
-  ) {
-    String formattedImageName = imageName.toLowerCase().replace(" ", "_");
-    String formattedDataType = formatDataTypeForFilename(dataPrefix);
-    String fileName = formattedImageName + "_" + formattedDataType + ".csv";
-    File file = new File(modeDir, fileName);
-    Uri exportFileUri = Uri.fromFile(file);
-    try (OutputStream outputStream = contentResolver.openOutputStream(exportFileUri)) {
-      if (outputStream != null) {
-        writer.writeData(outputStream, imageData);
-      }
-      return true;
-    } catch (IOException e) {
-      showExportMessage("Failed to export " + dataPrefix + " data for image: " + imageName);
-      return false;
     }
   }
 

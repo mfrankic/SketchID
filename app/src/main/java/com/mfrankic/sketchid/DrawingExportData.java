@@ -2,7 +2,7 @@ package com.mfrankic.sketchid;
 
 import androidx.room.Ignore;
 
-public class DrawingExportData {
+public class DrawingExportData implements ExportableData {
   private int id;
   private long time;
   private float x;
@@ -142,6 +142,7 @@ public class DrawingExportData {
     this.orientation = orientation;
   }
 
+  @Override
   public String getDrawingMode() {
     return drawingMode != null ? drawingMode : Constants.DRAWING_MODE_NORMAL;
   }

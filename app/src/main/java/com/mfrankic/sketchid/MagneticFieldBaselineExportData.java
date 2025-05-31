@@ -8,7 +8,7 @@ import androidx.room.ColumnInfo;
  * {@link MagneticFieldBaselineData}, {@link User}, and {@link Image} tables for exporting purposes.
  * It includes all fields from {@link MagneticFieldBaselineData} along with user and image names.
  */
-public class MagneticFieldBaselineExportData {
+public class MagneticFieldBaselineExportData implements ExportableData {
   /**
    * The unique identifier of the baseline data record.
    */
@@ -338,6 +338,7 @@ public class MagneticFieldBaselineExportData {
   /**
    * @return The drawing mode active when this data was recorded.
    */
+  @Override
   public String getDrawingMode() {
     return drawingMode;
   }
