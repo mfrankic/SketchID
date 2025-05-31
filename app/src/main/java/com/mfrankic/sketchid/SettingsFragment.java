@@ -62,7 +62,9 @@ public class SettingsFragment extends PreferenceFragmentCompat {
   private static final String UNKNOWN_VALUE = "unknown";
   private static final String UNKNOWN_IMAGE = "unknown_image";
   private static final String PROGRESS_ITEM_SUFFIX = " data";
-  private static final int EXPORT_PAGE_SIZE = 1000;
+  private static final int EXPORT_PAGE_SIZE = 2500;
+  private static final int CSV_SB_INITIAL_CAPACITY = 256;
+  private static final int BUFFERED_STREAM_SIZE = 32768;
 
   private EditTextPreference newUserPreference;
   private EditTextPreference drawingAttemptsPreference;
@@ -646,7 +648,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
                   OutputStream rawOutputStream
                       = context.contentResolver.openOutputStream(Uri.fromFile(csvFile));
                   if (rawOutputStream != null) {
-                    outputStream = new BufferedOutputStream(rawOutputStream);
+                    outputStream = new BufferedOutputStream(rawOutputStream, BUFFERED_STREAM_SIZE);
                     openStreams.put(csvFile, outputStream);
                   } else {
                     showExportMessage("Failed to open stream for: " + csvFile.getName());
@@ -720,7 +722,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
   private void writeDrawingDataToStream(OutputStream outputStream, List<DrawingExportData> modeData)
   throws IOException {
-    StringBuilder sb = new StringBuilder();
+    StringBuilder sb = new StringBuilder(CSV_SB_INITIAL_CAPACITY);
     for (DrawingExportData data : modeData) {
       sb.setLength(0); // Clear StringBuilder for new row
       sb.append(data.getId()).append(",");
@@ -1370,7 +1372,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
                   OutputStream rawOutputStream
                       = context.contentResolver.openOutputStream(Uri.fromFile(csvFile));
                   if (rawOutputStream != null) {
-                    outputStream = new BufferedOutputStream(rawOutputStream);
+                    outputStream = new BufferedOutputStream(rawOutputStream, BUFFERED_STREAM_SIZE);
                     openStreams.put(csvFile, outputStream);
                   } else {
                     showExportMessage("Failed to open stream for: " + csvFile.getName());
@@ -1505,7 +1507,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
   private void writeGravityDataToStream(OutputStream outputStream, List<GravityExportData> data)
   throws IOException {
-    StringBuilder sb = new StringBuilder();
+    StringBuilder sb = new StringBuilder(CSV_SB_INITIAL_CAPACITY);
     for (GravityExportData item : data) {
       sb.setLength(0);
       sb.append(item.getId()).append(",");
@@ -1526,7 +1528,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
 
   private void writeGyroscopeDataToStream(OutputStream outputStream, List<GyroscopeExportData> data)
   throws IOException {
-    StringBuilder sb = new StringBuilder();
+    StringBuilder sb = new StringBuilder(CSV_SB_INITIAL_CAPACITY);
     for (GyroscopeExportData item : data) {
       sb.setLength(0);
       sb.append(item.getId()).append(",");
@@ -1550,7 +1552,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       List<MagneticFieldExportData> data
   )
   throws IOException {
-    StringBuilder sb = new StringBuilder();
+    StringBuilder sb = new StringBuilder(CSV_SB_INITIAL_CAPACITY);
     for (MagneticFieldExportData item : data) {
       sb.setLength(0);
       sb.append(item.getId()).append(",");
@@ -1574,7 +1576,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       List<MagneticFieldBaselineExportData> data
   )
   throws IOException {
-    StringBuilder sb = new StringBuilder();
+    StringBuilder sb = new StringBuilder(CSV_SB_INITIAL_CAPACITY);
     for (MagneticFieldBaselineExportData item : data) {
       sb.setLength(0);
       sb.append(item.getId()).append(",");
@@ -1603,7 +1605,7 @@ public class SettingsFragment extends PreferenceFragmentCompat {
       List<AccelerometerExportData> data
   )
   throws IOException {
-    StringBuilder sb = new StringBuilder();
+    StringBuilder sb = new StringBuilder(CSV_SB_INITIAL_CAPACITY);
     for (AccelerometerExportData item : data) {
       sb.setLength(0);
       sb.append(item.getId()).append(",");
